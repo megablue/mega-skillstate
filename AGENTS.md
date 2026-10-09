@@ -35,13 +35,14 @@ the feature docs are the map, the mechanism and the traps.
 
 ## Layout
 
-- `opencode-skill-state/` — **the plugin package that ships**; nothing else in
-  this repo is deployed. Its three documents are kept apart on purpose: the
-  implementer-facing contract (`opencode-skill-state/SPEC.md`) names the
-  separations and invariants for whoever edits it; `opencode-skill-state/README.md`
-  is for a user installing it; `docs/SPEC.md` (this repo) is user-visible
-  behaviour with no code. Merging them would force one audience to read
-  another's detail.
+- **The plugin package is this repo root** — `src/`, `scripts/`, `server.ts`,
+  `options.json`, `package.json`, `tsconfig.json` and the three package documents sit
+  at the top level; the package was flattened here on `2026-10-10` and the nested
+  `opencode-skill-state/` subdirectory it used to live in is gone. Its three documents
+  are kept apart on purpose: the implementer-facing contract (`SPEC.md`) names the
+  separations and invariants for whoever edits it; `README.md` is for a user installing
+  it; `docs/SPEC.md` is user-visible behaviour with no code. Merging them would force one
+  audience to read another's detail.
   - `server.ts` — the host entry. The loader resolves `<plugin-root>/server`
     before `<plugin-root>/index` (`.ts` before `.js`), so a directory install
     needs only this one re-export.
@@ -64,7 +65,7 @@ the feature docs are the map, the mechanism and the traps.
 
 ## Commands
 
-Everything runs from `opencode-skill-state/` unless said otherwise.
+Everything runs from the repo root unless said otherwise.
 
 - Install dependencies: `npm install`
 - Typecheck (build gate, strict, no emit): `npm run typecheck`  (`npx tsc --noEmit`)
@@ -78,7 +79,7 @@ Everything runs from `opencode-skill-state/` unless said otherwise.
 
 The gate before a commit is every check, not just the tests:
 
-    npm run typecheck  →  npm run smoke        (run in `opencode-skill-state/`)
+    npm run typecheck  →  npm run smoke        (run from the repo root)
 
 There is no separate formatter or linter yet; `tsc --noEmit` under
 `strict: true` is the strict flag the smoke test runs after. A smoke run alone
@@ -163,8 +164,9 @@ across features; the feature pages keep the maps, mechanisms and traps.
   dropping or overwriting existing keys; schema ownership in the deterministic
   runtime is what keeps a malformed patch from corrupting Σ. *Pinned by:* the merge
   unit test (null-delete, unknown-key-drop).
-- **Change no file outside `opencode-skill-state/`, and never edit the reference
-  plugin** at `C:\Users\mega\.config\opencode\plugins\opencode-feature-map-as-context`.
+- **The product is the repo root.** Only `docs/` and the untracked paper are not
+  deployed, and never edit the reference plugin** at
+  `C:\Users\mega\.config\opencode\plugins\opencode-feature-map-as-context`.
   *Reason:* that plugin is a live dependency of this host and the measured ground
   truth for the plugin API; changing it silently changes both. *Pinned by:* review
   only — there is no automated check, so treat it as a review gate.

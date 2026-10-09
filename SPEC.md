@@ -142,7 +142,7 @@ On each `context` event for session `S`:
   window, `keepRecentTurns`, and a per-turn index showing what is collapsed vs kept. Then
   an interactive subcommand `now` to force a collapse this pass.
 
-## Module layout (build under `opencode-skill-state/`)
+## Module layout
 
 ```
 server.ts        -> export { default } from "./src/index.ts"   (host resolves <root>/server)

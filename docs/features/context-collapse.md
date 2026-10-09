@@ -2,7 +2,7 @@
 
 Status: shipped (v0.2) · Read when: outbound payload too big; Σ missing from a request; a tool call and its result were split; idempotence; the `context` hook.
 
-User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `../../opencode-skill-state/HOST-API-NOTES.md`.
+User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-NOTES.md`.
 
 ## What it does
 

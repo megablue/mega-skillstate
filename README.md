@@ -43,13 +43,19 @@ TypeScript source is loaded directly.
 **User scope** (every project):
 
 ```
-copy this directory to C:\Users\mega\.config\opencode\plugins\opencode-skill-state
+robocopy . "%USERPROFILE%\.config\opencode\plugins\opencode-skill-state" *.ts *.json *.md /E /XD node_modules docs .git .opencode
 ```
+
+That copies the shippable subset only — `server.ts`, `src/`, `options.json`,
+`package.json`, `package-lock.json`, `README.md`, `SPEC.md`, `HOST-API-NOTES.md`. The package
+is the repo root, so "this directory" would otherwise mean the whole repo, paper and `.git`
+included. Run `npm install` in the destination only if you want the typecheck and smoke test
+there too; the host loads the TypeScript source directly and needs no node_modules.
 
 **Project scope** (one project only):
 
 ```
-copy this directory to <project>\.opencode\plugin\opencode-skill-state
+robocopy . "<project>\.opencode\plugin\opencode-skill-state" *.ts *.json *.md /E /XD node_modules docs .git .opencode
 ```
 
 Both discovery directories are read (`.opencode/plugin/` and `.opencode/plugins/`).

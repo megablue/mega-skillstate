@@ -9,12 +9,27 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-10` (working tree, v0.2 not yet committed) — `2026-10-09` was v0.1.
+As of `2026-10-10` — `master` carries v0.1, v0.2, the paper-untrack commit and the
+flatten. `2026-10-09` was v0.1.
 
 ## State
 
-- **v0.1 committed on `master`** — root commit, clean tree, 39 files / ~11.9k insertions.
-  No remote configured yet. v0.2 is built and verified but **uncommitted**.
+- **Everything is on `master`.** v0.1 (root commit), v0.2 (the two `lib-1` seams below),
+  then `b15fc35` untracked the paper and the package was **flattened to the repo root**.
+- **The package is the repo root** — `src/`, `scripts/`, `server.ts`, `options.json`,
+  `package.json`, `tsconfig.json` and the four docs all sit at the top level now; the old
+  `opencode-skill-state/` subdirectory is gone. The plugin keeps its **id**
+  `opencode-skill-state` (package name, `plugin.default.id`, `~PLUGIN`); only path-shaped
+  references changed. The README's install instruction is a `robocopy` of the shippable
+  subset (`*.ts *.json *.md`, excluding `node_modules docs .git .opencode`), because
+  "copy this directory" would now mean the whole repo, paper and `.git` included.
+- **The live install is a junction, and that is the trap.** `.opencode/plugin/
+  opencode-skill-state` is `LinkType=Junction` pointing at the **repo root**. It used to
+  point at the nested package directory, so a session that flattens must repoint it — and
+  repoint it *before* deleting the old directory. Delete a junction with
+  `(Get-Item $link).Delete()`; never `Remove-Item -Recurse`, which can recurse through the
+  link and delete the target's contents. The user-scope directory
+  (`~/.config/opencode/plugins/opencode-skill-state`) never existed.
 - **v0.2 adds the two `lib-1` seams** from `HOST-API-NOTES.md` "Integrate next":
   - **durable Σ** — `ctx.storage`, key `state/<sessionID>`, in-memory LRU (`MAX_SESSIONS = 64`)
     as a write-through cache. Reads async (a miss is one `storage.get`), the `⊕` merge stays
@@ -23,10 +38,11 @@ As of `2026-10-10` (working tree, v0.2 not yet committed) — `2026-10-09` was v
     Deterministic distillation (persisted Σ + whole-transcript seed sweep, holes only),
     `event.result = { summary: stateMessageText(Σ, span) }`, **no model call**, and
     `result` left unset when `hasMeaningfulState` is false. `event.messages` read-only.
-- **Gate green**: `npm run typecheck` (strict, `--noEmit`) clean; `npm run smoke` → ok.
-  The original numbers are unchanged (61 → 14 messages, 15406 → 3642 tokens) and the smoke
-  now also pins the durable write, the restart, the compaction path and its guard, the
-  no-store and broken-store degradations.
+- **Gate green from the flattened root**: `npm run typecheck` (strict, `--noEmit`) clean and
+  `npm run smoke` → ok, both re-run after the flatten. The pinning numbers are unchanged
+  (61 → 14 messages, 15406 → 3642 tokens) and the smoke still pins idempotence, the
+  durable write, the restart, the compaction path and its guard, and the no-store and
+  broken-store degradations — so the flatten is behaviour-neutral, as it should be.
 - **New module `src/compaction.ts`**; `src/state.ts` is now async and durable; `src/seed.ts`
   gained `seedHintsFromMessages` (whole transcript) beside `seedHints` (the kept window).
 - Docs updated in the same change: `docs/SPEC.md` (new **Compaction** section; the
@@ -36,12 +52,18 @@ As of `2026-10-10` (working tree, v0.2 not yet committed) — `2026-10-09` was v
 
 ## Open threads
 
-- **Commit v0.2** — `git commit -F <scratch>` through the `commit-msg` hook, no AI
-  attribution (see `AGENTS.md`). Nothing staged or committed by the implementing session.
-- **Live end-to-end run** inside a real OpenCode session — the smoke test drives a fake host,
-  not the live one. Requires the user's OK to install into a discovery dir.
-- **Install target** — project `.opencode/plugin(s)/` vs this user's `~/.config/opencode/plugins/`.
-  **Ask the user; installing changes the running OpenCode.**
+- **(done) Commit v0.2** — it is on `master` (`c15c38e`), committed through the `commit-msg`
+  hook with no AI attribution, as `AGENTS.md` requires.
+- **Live end-to-end run** inside a real OpenCode session — the smoke test drives a fake
+  *host*, not this one. The load path itself is already proven live: the junction resolves
+  `<repo>/server` and this session's `/skillstate` command works, which is the discovery and
+  registration half. What is still unproven is a real collapse firing against the live
+  harness's **actual** payload (the token count there is the one the smoke only models).
+  Just keep talking; `/skillstate` prints the per-turn index showing what collapsed.
+- **(answered) Install target** — project scope won. The live install is
+  `.opencode/plugin/opencode-skill-state`, a **junction to the repo root**, not a copy;
+  the user-scope directory `~/.config/opencode/plugins/opencode-skill-state` never
+  existed. See the junction trap in **State** above before moving this repo.
 - Not implemented from `HOST-API-NOTES.md`: `ctx.event.subscribe` idle flush,
   `ctx.session.synthetic` durable turn, `Message.system()` injection role.
 - Optional: a token/percentage-gated collapse trigger alongside the turn-count gate

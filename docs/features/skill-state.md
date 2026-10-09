@@ -2,7 +2,7 @@
 
 Status: shipped (v0.2) · Read when: Σ fields; a null that should delete; an unknown key that should be dropped; arrays replace vs merge; seeding from tools; state persistence / restart; render/stability.
 
-User-visible behavior: `docs/SPEC.md` → Scope, Compaction. The state is the sufficient statistic the paper's runtime maintains; see the paper `arxiv` source and `../../opencode-skill-state/SPEC.md` for the design.
+User-visible behavior: `docs/SPEC.md` → Scope, Compaction. The state is the sufficient statistic the paper's runtime maintains; see the paper `docs/arXiv-2608.26263v2/acl_latex.tex` source and `SPEC.md` for the design.
 
 ## What it does
 

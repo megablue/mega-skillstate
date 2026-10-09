@@ -61,7 +61,7 @@ It deliberately does **not**:
 ## Settings
 
 User-configurable values live in the plugin package's `options.json`
-(`opencode-skill-state/options.json`; an installed discovery copy carries its own).
+(`options.json`; an installed discovery copy carries its own).
 Read the package `README.md` for install scope.
 
 | Setting | Default | Range / clamp | Where |

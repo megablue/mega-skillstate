@@ -24,7 +24,7 @@
  * Measure, don't deduce: every number below is printed, so a failure names the payload
  * that broke rather than a rule nobody can read.
  *
- * Run: `node scripts/smoke.mjs .` from `opencode-skill-state/`.
+ * Run: `node scripts/smoke.mjs .` from the repo root.
  */
 
 import assert from "node:assert/strict"

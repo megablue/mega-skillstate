@@ -22,7 +22,7 @@
  * 3. The host's payload names no turn. This plugin numbers them itself, once per
  *    session, from the user messages it sees — see {@link turnMap}.
  *
- * @module opencode-skill-state/view
+ * @module opencode-g-skill-state/view
  */
 
 import type { ContentPart, Message, ToolCallPart, ToolResultPart } from "./types.ts"

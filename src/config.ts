@@ -6,14 +6,14 @@
  * and an unrecognised key is an error rather than a silently ignored typo: a context
  * policy that quietly keeps a default is worse than one that refuses to load.
  *
- * @module opencode-skill-state/config
+ * @module opencode-g-skill-state/config
  */
 
 import { existsSync, readFileSync } from "node:fs"
 import { basename } from "node:path"
 
 /** Package name; it is the plugin's id, and the label every message of its own is attributed to. */
-export const PLUGIN = "opencode-skill-state"
+export const PLUGIN = "opencode-g-skill-state"
 
 /**
  * Everything the plugin reads, with the value used when the plugin entry says nothing.

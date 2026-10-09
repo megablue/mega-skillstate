@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The pinning test for opencode-skill-state's hard rules.
+ * The pinning test for opencode-g-skill-state's hard rules.
  *
  * It builds a fake host, loads the plugin exactly the way the OpenCode loader does,
  * and drives a synthetic `context` event whose transcript is a head instruction plus
@@ -229,14 +229,14 @@ function row(label, value) {
   console.log("  " + label.padEnd(34, ".") + " " + value)
 }
 
-console.log("opencode-skill-state smoke — " + root + "\n")
+console.log("opencode-g-skill-state smoke — " + root + "\n")
 
 // ---------------------------------------------------------------------------
 // Load the plugin the way the host does, and register it against the fake host.
 // ---------------------------------------------------------------------------
 const plugin = await load("server.ts")
 assert.equal(typeof plugin.default, "object", "server.ts must export a default plugin")
-assert.equal(plugin.default.id, "opencode-skill-state")
+assert.equal(plugin.default.id, "opencode-g-skill-state")
 assert.equal(typeof plugin.default.setup, "function", "the plugin must export setup")
 
 const host = createHost()
@@ -697,13 +697,18 @@ console.log("")
   const install = await import("./install.ts")
   const scratch = mkdtempSync(join(tmpdir(), "skill-state-install-"))
   const linkDir = join(scratch, "plugins")
-  const linkPath = join(linkDir, "opencode-skill-state")
 
-  // A package root that looks enough like one: the loader's entry has to exist.
+  // A package root that looks enough like one: the loader's entry has to exist,
+  // and the manifest is where the discovery-directory name is read from. The
+  // installer derives the link's name rather than carrying a fourth literal for
+  // it, so a fake root without a manifest is no longer a package root.
   const fakeRoot = join(scratch, "package")
   mkdirSync(fakeRoot, { recursive: true })
+  const manifestName = "opencode-g-skill-state"
   writeFileSync(join(fakeRoot, "server.ts"), "// a stand-in for the host entry\n")
+  writeFileSync(join(fakeRoot, "package.json"), JSON.stringify({ name: manifestName }) + "\n")
   writeFileSync(join(fakeRoot, "keep.txt"), "the target's own content\n")
+  const linkPath = join(linkDir, manifestName)
 
   try {
     const first = install.installInto(linkDir, fakeRoot)
@@ -724,7 +729,7 @@ console.log("")
 
     // The destructive case: removing a link must leave the target's contents alone.
     // A recursive rmSync here would delete `fakeRoot` — this repository, in production.
-    install.uninstallFrom(linkDir)
+    install.uninstallFrom(linkDir, fakeRoot)
     assert.equal(existsSync(linkPath), false, "the link is gone")
     assert.equal(existsSync(join(fakeRoot, "keep.txt")), true, "the target's contents survive")
     assert.equal(existsSync(join(fakeRoot, "server.ts")), true, "so does the host entry")

@@ -24,7 +24,7 @@
  * - **A message is only appended at a balanced tail**, so nothing is ever inserted
  *   between a call and its result.
  *
- * @module opencode-skill-state/context
+ * @module opencode-g-skill-state/context
  */
 
 import { resolveThresholds, type ResolvedConfig } from "./config.ts"

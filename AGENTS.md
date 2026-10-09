@@ -38,8 +38,8 @@ the feature docs are the map, the mechanism and the traps.
 - **The plugin package is this repo root** — `src/`, `scripts/`, `server.ts`,
   `options.json`, `package.json`, `tsconfig.json` and the three package documents sit
   at the top level; the package was flattened here on `2026-10-10` and the nested
-  `opencode-skill-state/` subdirectory it used to live in is gone. Its three documents
-  are kept apart on purpose: the implementer-facing contract (`SPEC.md`) names the
+  `package.json` subdirectory it used to live in is gone. Its three documents
+  are kept apart on purpose: the implementer-facing contract (`DESIGN.md`) names the
   separations and invariants for whoever edits it; `README.md` is for a user installing
   it; `docs/SPEC.md` is user-visible behaviour with no code. Merging them would force one
   audience to read another's detail.
@@ -73,7 +73,7 @@ Everything runs from the repo root unless said otherwise.
   semantics): `npm run smoke`  (`node scripts/smoke.mjs .`)
 - Load the plugin in OpenCode: the host resolves `<plugin-root>/server`, so point
   a discovery directory at this package. Project scope:
-  `.opencode/plugin/opencode-skill-state`; user scope:
+  `.opencode/plugin/opencode-g-skill-state`; user scope:
   `C:\Users\mega\.config\opencode\plugins\`. No build step — the host loads the
   TypeScript source directly.
 

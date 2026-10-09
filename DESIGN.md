@@ -1,4 +1,4 @@
-# opencode-skill-state — design contract
+# opencode-g-skill-state — design contract
 
 > Applies the **SKILL.state** runtime idea (see `docs/arXiv-2608.26263v2/acl_latex.tex`)
 > to OpenCode 2.0: bound the context window with an **explicit structured execution

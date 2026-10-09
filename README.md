@@ -1,4 +1,4 @@
-# opencode-skill-state
+# opencode-g-skill-state
 
 An OpenCode 2.0 plugin that bounds a session's context window with an **explicit,
 structured execution state (Σ)** instead of an append-only conversation history.

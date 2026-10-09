@@ -21,18 +21,21 @@ The working tree is **clean at the tip** — `a7b2acf` is the last thing deliver
   then `b15fc35` untracked the paper and the package was **flattened to the repo root**.
 - **The package is the repo root** — `src/`, `scripts/`, `server.ts`, `options.json`,
   `package.json`, `tsconfig.json` and the four docs all sit at the top level now; the old
-  `opencode-skill-state/` subdirectory is gone. The plugin keeps its **id**
-  `opencode-skill-state` (package name, `plugin.default.id`, `~PLUGIN`); only path-shaped
+  `package.json` subdirectory it used to live in is gone. The plugin keeps its **id**
+  `opencode-g-skill-state` (package name, `plugin.default.id`, `~PLUGIN`); only path-shaped
   references changed. The README's install instruction is a `robocopy` of the shippable
   subset (`*.ts *.json *.md`, excluding `node_modules docs .git .opencode`), because
   "copy this directory" would now mean the whole repo, paper and `.git` included.
 - **The live install is a junction, and that is the trap.** `.opencode/plugin/
-  opencode-skill-state` is `LinkType=Junction` pointing at the **repo root**. It used to
+  opencode-g-skill-state` is `LinkType=Junction` pointing at the **repo root**. It used to
   point at the nested package directory, so a session that flattens must repoint it — and
   repoint it *before* deleting the old directory. Delete a junction with
   `(Get-Item $link).Delete()`; never `Remove-Item -Recurse`, which can recurse through the
   link and delete the target's contents. The user-scope directory
-  (`~/.config/opencode/plugins/opencode-skill-state`) never existed.
+  (`~/.config/opencode/plugins/opencode-g-skill-state`) never existed.
+  **A rename re-points it too:** `npm run plugin:install:project` creates the new-name link
+  (verified: resolves `server.ts`), and the old-name junction is then deleted with the same
+  `(Get-Item $link).Delete()` — the old directory is not removed, only the link.
 - **Install and uninstall now exist** — `scripts/install.ts` (252 new lines) plus four
   `plugin:*` npm scripts, ported from the reference plugin's contract rather than invented:
   one script, three modes, scope chosen by flag. Default = **user scope**
@@ -97,8 +100,8 @@ The working tree is **clean at the tip** — `a7b2acf` is the last thing deliver
   mid-session, and the plugin-injected Σ state message was rendered in the live request. Keep
   talking; `/skillstate` prints the index showing what collapsed.
 - **(answered) Install target** — project scope won. The live install is
-  `.opencode/plugin/opencode-skill-state`, a **junction to the repo root**, not a copy;
-  the user-scope directory `~/.config/opencode/plugins/opencode-skill-state` never
+  `.opencode/plugin/opencode-g-skill-state`, a **junction to the repo root**, not a copy;
+  the user-scope directory `~/.config/opencode/plugins/opencode-g-skill-state` never
   existed. See the junction trap in **State** above before moving this repo.
 - The installer has **no uninstall for the user scope** in practice — running
   `plugin:uninstall` targets `~/.config/opencode/plugins`, where nothing was ever installed,
@@ -128,17 +131,19 @@ The working tree is **clean at the tip** — `a7b2acf` is the last thing deliver
   Fixed on `2026-10-10`: the duplicate block was removed and the surviving `skill_state` row
   gained the install/uninstall trigger. The check that finds it is `git grep` a feature name
   over the index — two hits means it came back.
-- **`opencode plugin list` prints a stale row, and nothing on disk is wrong.** After the
+- **`opencode plugin list` printed a stale row once, and nothing on disk was wrong.** After the
   flatten it showed `opencode-skill-state` → `…/opencode-g-skill-state/opencode-skill-state/
-  server.ts`, a directory that no longer exists. Searched on `2026-10-10`: **no config,
-  state, cache or database file holds it.** `~/.config/opencode/` has zero hits;
+  server.ts`, a directory that no longer existed. Searched on `2026-10-10`: **no config,
+  state, cache or database file held it.** `~/.config/opencode/` had zero hits;
   `opencode.db` has no plugin-registry table (its only plugin-named row is this plugin's own
   `kv` state, from `src/state.ts`); `opencode.json`'s `plugins` array is only
-  `//@tarquinen/opencode-dcp@latest` and `oh-my-opencode-slim`. The string survives only in
+  `//@tarquinen/opencode-dcp@latest` and `oh-my-opencode-slim`. The string survived only in
   `~/.local/share/opencode/log/opencode.log` (a log) and in the **running server's
   in-memory resolution** — the server had not re-scanned since the `git mv`. Clearing the
-  row is therefore an `opencode` **server restart**, not a config edit, and the junction is
-  already correct. Do not go hunting for it again.
+  row was therefore an `opencode` **server restart**, not a config edit.
+  *Superseded on the same day:* the plugin was renamed to `opencode-g-skill-state`, the
+  junction re-pointed, and the old-name link deleted — so this row cannot be produced by
+  the repo again. Kept only so nobody re-hunts for a string that will not reappear.
 
 ## Local-only state (not on the remote)
 

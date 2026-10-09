@@ -12,7 +12,7 @@
  * difference between this plugin and an ordinary compactor, and it is the part a model
  * forgets first.
  *
- * @module opencode-skill-state/prompts
+ * @module opencode-g-skill-state/prompts
  */
 
 import { render, STATE_FIELDS, type Sigma } from "./schema.ts"

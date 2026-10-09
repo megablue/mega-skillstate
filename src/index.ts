@@ -1,5 +1,5 @@
 /**
- * opencode-skill-state — bound the context window with an explicit, structured
+ * opencode-g-skill-state — bound the context window with an explicit, structured
  * execution state instead of an append-only conversation history.
  *
  * Four contributions, registered from one `setup`:
@@ -18,7 +18,7 @@
  * the in-memory Σ. Cuts happen only at safe turn boundaries, so a `tool-call` is never
  * separated from its `tool-result`.
  *
- * @module opencode-skill-state
+ * @module opencode-g-skill-state
  */
 
 import type { Plugin } from "@opencode/plugin"

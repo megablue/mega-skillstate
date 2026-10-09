@@ -2,7 +2,7 @@
 
 Status: shipped (v0.2) · Read when: the host asks for a compaction; a summary that lost the plan; Σ that never reaches a compaction; a restart before compaction.
 
-User-visible behavior: `docs/SPEC.md` → Compaction. The design contract is `SPEC.md`; the host seam is `HOST-API-NOTES.md` ("Integrate next" §2).
+User-visible behavior: `docs/SPEC.md` → Compaction. The design contract is `DESIGN.md`; the host seam is `HOST-API-NOTES.md` ("Integrate next" §2).
 
 ## What it does
 

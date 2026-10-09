@@ -15,7 +15,7 @@
  * 2. **A seed only fills a hole** (`StateRecord.seed`). Once the model has said
  *    anything about a key, its word is final.
  *
- * @module opencode-skill-state/seed
+ * @module opencode-g-skill-state/seed
  */
 
 import { isPlainObject, type Sigma } from "./schema.ts"

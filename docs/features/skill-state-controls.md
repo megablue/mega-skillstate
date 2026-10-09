@@ -32,6 +32,9 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 - `scripts/install.ts` — the installer: `parseArgs`, `packageRoot`, `userPluginDir`,
   `projectPluginDir`, `discoveryDirs`, `isLink`, `installInto`, `uninstallFrom`, `run`,
   `statusLines`. Three modes (`--project`, `--remove`, `--status`) over one script.
+  The discovery-directory name is **read from `package.json` by `packageName(root)`**, never
+  written again — a rename is a one-line change to the manifest, not a hunt through four
+  call sites.
 
 ## How & why
 

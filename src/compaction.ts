@@ -24,7 +24,7 @@
  * `event.messages` is read and never written. This plugin owns the content of the
  * summary, not the transcript it came from.
  *
- * @module opencode-skill-state/compaction
+ * @module opencode-g-skill-state/compaction
  */
 
 import type { ResolvedConfig } from "./config.ts"

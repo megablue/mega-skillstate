@@ -23,15 +23,41 @@
  * plugin that then fails to load. So the installer is idempotent and reversible, and
  * `--status` is a diagnostic rather than a guess.
  *
- * @module opencode-skill-state/install
+ * @module opencode-g-skill-state/install
  */
 
-import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync } from "node:fs"
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs"
 import { homedir } from "node:os"
-import { dirname, isAbsolute, join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 
 /** The entry the loader resolves first; a `.js` build would shadow this only if present. */
 const ENTRY = "server.ts"
+
+/**
+ * The package's own name, read from its manifest rather than written down again.
+ *
+ * The discovery directory name, the plugin's `id`, and the label its messages are
+ * attributed to are all this one string. Writing it a second time here — or a
+ * fourth, which is what it was — is how a rename ships half-applied, and a link
+ * under the wrong name is a plugin the host never discovers. This is the single
+ * reader; a rename edits `package.json`.
+ */
+function packageName(root: string): string {
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name?: unknown }
+  if (typeof manifest.name !== "string" || manifest.name.length === 0) {
+    throw new Error(`${root}/package.json has no name`)
+  }
+  return manifest.name
+}
 
 /** What a discovery directory has to contain to be usable at all. */
 export interface InstallResult {
@@ -63,7 +89,7 @@ export function parseArgs(argv: readonly string[]): { project: boolean; remove: 
 function printHelp(): void {
   process.stdout.write(
     [
-      "Install opencode-skill-state into an OpenCode plugin discovery directory.",
+      "Install opencode-g-skill-state into an OpenCode plugin discovery directory.",
       "",
       "  (no arguments)   link into the user scope (~/.config/opencode/plugins/)",
       "  --project        link into this repository (.opencode/plugin/)",
@@ -139,7 +165,7 @@ function removeLink(path: string): void {
  * and is indistinguishable from a broken one.
  */
 export function installInto(dir: string, root: string): InstallResult {
-  const name = "opencode-skill-state"
+  const name = packageName(root)
   const path = join(dir, name)
 
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -172,8 +198,8 @@ export function installInto(dir: string, root: string): InstallResult {
 }
 
 /** Remove the plugin from a discovery directory, when it is there. */
-export function uninstallFrom(dir: string): InstallResult {
-  const path = join(dir, "opencode-skill-state")
+export function uninstallFrom(dir: string, root: string): InstallResult {
+  const path = join(dir, packageName(root))
   if (!existsSync(path) && !isLink(path)) {
     return { scope: "user", path, target: "", action: "missing" }
   }
@@ -192,7 +218,7 @@ export function run(argv: readonly string[], root: string): number {
     if (status) {
       const rows: string[] = []
       for (const candidate of discoveryDirs(root)) {
-        const path = join(candidate.dir, "opencode-skill-state")
+        const path = join(candidate.dir, packageName(root))
         const here = existsSync(path) || isLink(path)
         const target = isLink(path) ? readlinkSync(path) : undefined
         rows.push(
@@ -200,11 +226,11 @@ export function run(argv: readonly string[], root: string): number {
             (here ? ` -> ${target ?? "a real directory"}` : " (not installed)"),
         )
       }
-      process.stdout.write("opencode-skill-state discoverable from:\n" + rows.join("\n") + "\n")
+      process.stdout.write(`${packageName(root)} discoverable from:\n` + rows.join("\n") + "\n")
       return 0
     }
 
-    const result = remove ? uninstallFrom(dir) : installInto(dir, root)
+    const result = remove ? uninstallFrom(dir, root) : installInto(dir, root)
     const verb =
       result.action === "linked"
         ? `linked into ${label}`
@@ -242,11 +268,7 @@ export function emptyDirs(root: string): string[] {
 /** What a status run reports, for the smoke test to assert on without capturing stdout. */
 export function statusLines(root: string): string[] {
   return discoveryDirs(root).map((entry) => {
-    const path = join(entry.dir, "opencode-skill-state")
+    const path = join(entry.dir, packageName(root))
     return existsSync(path) || isLink(path) ? entry.scope + ": installed" : entry.scope + ": absent"
   })
 }
-
-/** Unused import guard: keeps the plugin-name literal beside the one place it is derived. */
-export const PLUGIN_DIR_NAME = "opencode-skill-state"
-void isAbsolute

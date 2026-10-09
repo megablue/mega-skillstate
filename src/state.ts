@@ -27,7 +27,7 @@
  * What it must never do is throw, because a turn that breaks is worse than a state that
  * has to be rebuilt.
  *
- * @module opencode-skill-state/state
+ * @module opencode-g-skill-state/state
  */
 
 import { changedKeys, merge, validateKeys, type Sigma } from "./schema.ts"

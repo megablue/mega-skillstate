@@ -31,8 +31,7 @@ import { resolveThresholds, type ResolvedConfig } from "./config.ts"
 import { nudgeText, SECTION_TEXT, stateMessageText } from "./prompts.ts"
 import { EMPTY_HINTS, seedHints, type SeedHints } from "./seed.ts"
 import { stateStore, type StateRecord } from "./state.ts"
-import { TOOL_NAME } from "./tool.ts"
-import type { CollapsedSpan, Message, SystemPart } from "./types.ts"
+import type { CollapsedSpan, Message, StorageDomain, SystemPart } from "./types.ts"
 import {
   balanceCuts,
   firstSelectableIndex,
@@ -52,6 +51,8 @@ export interface TransformDeps {
   readonly config: ResolvedConfig
   /** The routed model's window, by `providerID/id`. */
   readonly windows?: ReadonlyMap<string, number>
+  /** The host's plugin-scoped KV; absent means Σ lives in memory only. */
+  readonly storage?: StorageDomain
   readonly log?: (line: string) => void
 }
 
@@ -78,6 +79,7 @@ export interface SessionContextEventLike {
 
 /** What the wire offer for `skill_state` carries. */
 export interface ToolWireEntry {
+  readonly name: string
   readonly description: string
   readonly input: unknown
 }
@@ -222,9 +224,9 @@ function lastUserId(view: ReadonlyArray<ViewNode>): string | undefined {
  * is the turn numbering and the step count, both of which are idempotent by
  * construction.
  */
-export function describeContext(deps: TransformDeps, input: TransformInput): ContextDescriptor {
+export async function describeContext(deps: TransformDeps, input: TransformInput): Promise<ContextDescriptor> {
   const { config } = deps
-  const record = stateStore(input.sessionID)
+  const record = await stateStore(input.sessionID, { storage: deps.storage, log: deps.log })
   const messages = input.messages ?? []
   const view = viewOf(messages)
   const balance = safeBalance(view)
@@ -297,7 +299,7 @@ function seedPatch(hints: SeedHints): Record<string, unknown> {
  * @returns the report, after mutating `input.messages` in place — the writer is this
  *   module's only side effect, and the durable transcript is never touched.
  */
-export function applyTransform(deps: TransformDeps, input: TransformInput): ContextReport {
+export async function applyTransform(deps: TransformDeps, input: TransformInput): Promise<ContextReport> {
   const { config } = deps
   const messages = input.messages ?? []
   const notes: string[] = []
@@ -325,7 +327,10 @@ export function applyTransform(deps: TransformDeps, input: TransformInput): Cont
   // back, which is what makes running it twice over the same array a no-op.
   stripInjected(messages)
 
-  const descriptor = describeContext(deps, { ...input, messages })
+  // Reads are async now, because the store may be durable: the LRU is a write-through
+  // cache, and a miss costs one `storage.get`. The ⊕ merge itself stays synchronous —
+  // load, merge, persist — so the state this pass holds is never a half-applied draft.
+  const descriptor = await describeContext(deps, { ...input, messages })
   const { record } = descriptor
   const report: ContextReport = {
     ...base,
@@ -363,8 +368,10 @@ export function applyTransform(deps: TransformDeps, input: TransformInput): Cont
       const at = range.startIdx
       // The seed reads the window that survives, never the prefix that is about to go.
       const hints = config.seedFromTools === true ? seedHints(messages.slice(range.endIdx + 1), config.trackTools) : EMPTY_HINTS
-      record.seed(seedPatch(hints))
-      record.setCollapsed(span)
+      // Seed, then commit the span, and only then build the text: every write-through is
+      // awaited, so by the time `record.get()` is read the store has already been told.
+      await record.seed(seedPatch(hints))
+      await record.setCollapsed(span)
       try {
         const removed = range.endIdx - at + 1
         messages.splice(at, removed, stateMessage(record.get(), span))
@@ -381,7 +388,7 @@ export function applyTransform(deps: TransformDeps, input: TransformInput): Cont
       const span = record.collapsed() as CollapsedSpan
       const at = firstSelectableIndex(descriptor.view, { protectFirstUserMessage: protect })
       const hints = config.seedFromTools === true ? seedHints(messages.slice(at), config.trackTools) : EMPTY_HINTS
-      record.seed(seedPatch(hints))
+      await record.seed(seedPatch(hints))
       try {
         messages.splice(at, 0, stateMessage(record.get(), span))
         collapsed = { ...span, messages: 0 }
@@ -471,11 +478,11 @@ export async function runContextTransform(
     event.system.push({ type: "text", text: SECTION_TEXT })
   }
   const tools = event.tools as Record<string, unknown> | undefined
-  if (tools !== undefined && tools[TOOL_NAME] === undefined) {
+  if (tools !== undefined && tools[entry.name] === undefined) {
     // The whole definition rather than just its name: the host builds the offered tool
     // from this map, and the output schema the tool result is validated against has to
     // travel with it.
-    tools[TOOL_NAME] = { description: entry.description, input: entry.input }
+    tools[entry.name] = { description: entry.description, input: entry.input }
   }
   const sessionID = typeof event.sessionID === "string" ? event.sessionID : undefined
   if (sessionID === undefined) {

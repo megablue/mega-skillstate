@@ -64,13 +64,18 @@ function looksLikePath(token: string): boolean {
 }
 
 /**
- * Read the recent window for what Σ's floor should say.
+ * Read the messages it is given for what Σ's floor should say.
  *
- * @param messages - the payload as it is about to be sent (head + Σ + recent window).
+ * This is the scan both callers use, and the only thing that distinguishes them is what
+ * they hand it: the transform hands the window that survives a collapse, the compaction
+ * sweep hands the whole transcript. Same rules either way — only what a tracked tool call
+ * names counts, and a seed only ever fills a hole.
+ *
+ * @param messages - the payload as the host wrote it.
  * @param trackTools - the tool names worth reading.
  * @returns hints for `working`, `files` and `step`; each is empty when nothing said it.
  */
-export function seedHints(messages: ReadonlyArray<Message>, trackTools: ReadonlyArray<string>): SeedHints {
+export function seedHintsFromMessages(messages: ReadonlyArray<Message>, trackTools: ReadonlyArray<string>): SeedHints {
   const tracked = new Set(trackTools)
   const files = new Map<string, string>()
   const names = new Map<string, string>()
@@ -122,6 +127,17 @@ export function seedHints(messages: ReadonlyArray<Message>, trackTools: Readonly
   if (files.size > 0) working["activeFiles"] = [...files.keys()].sort()
 
   return { files: Object.fromEntries([...files.entries()].sort(([a], [b]) => (a < b ? -1 : 1))), working, step: calls }
+}
+
+/**
+ * The transform's window scan.
+ *
+ * The transform passes exactly the messages that survive the collapse, so Σ's floor is
+ * measured against the window the model will still be able to read — not against the
+ * prefix that is about to be folded into Σ.
+ */
+export function seedHints(messages: ReadonlyArray<Message>, trackTools: ReadonlyArray<string>): SeedHints {
+  return seedHintsFromMessages(messages, trackTools)
 }
 
 /** Nothing in the window said anything: the seed stays out of Σ entirely. */

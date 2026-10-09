@@ -29,16 +29,31 @@ It is for long agent sessions where append-only history would otherwise grow
 quadratically. In practice, collapsing turns into Σ is **gated by turn count**
 (`min` to start, `keepRecentTurns` kept), not by a token budget.
 
+## Compaction
+
+When the host needs a compaction message, the plugin answers it with Σ instead of
+asking for one. It combines the Σ the model has maintained through `skill_state`
+with a deterministic sweep of the transcript (the same `files` / `working` /
+`step` floor the collapse uses, filling only keys the model has not written), and
+hand that back as the compaction message. If the result has something to say —
+an objective, a plan, completed work, findings, files, decisions or open items — the
+host makes **no summarization call of its own** and persists that text. If it has
+nothing to say, the plugin stays out of the way and the host summarizes as usual.
+
+Σ is **durable**: it is stored per session under the plugin's own storage, so a
+restart of the plugin or the host brings the state back instead of re-expanding to
+the raw transcript. A failure reaching that store degrades to in-memory state and
+is reported in the log; it never breaks a session.
+
 It deliberately does **not**:
 
 - re-verify or reproduce the source paper's results (the paper is a reference,
   not a test target);
 - touch the durable transcript — it only rewrites the request the host is about to
-  send. A consequence a user can observe: **Σ lives in memory**, so a plugin or host
-  restart re-expands the context to the raw transcript rather than restoring Σ.
-  (Durable Σ across restarts, via `ctx.storage`, is a known planned follow-up, not
-  shipped yet — see `HANDOFF.md`.)
-- replace the host's own built-in compactor;
+  send, and reads (never writes) the transcript handed to the compaction seam;
+- run a private model to distill Σ: the state is maintained semantically by the
+  model itself, and the deterministic sweep only fills the floor;
+- replace the host's own built-in compactor when the distilled Σ is empty;
 - handle multi-agent shared state with concurrent writes (a limitation the paper
   itself records);
 - act on sub-agent (child) sessions unless `allowSubagentSessions` is turned on.

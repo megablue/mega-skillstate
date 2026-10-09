@@ -9,48 +9,50 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of HEAD (see `git log -1`) — `2026-10-09`.
+As of `2026-10-10` (working tree, v0.2 not yet committed) — `2026-10-09` was v0.1.
 
 ## State
 
-- **Repo initialized on `master` and v0.1 committed** — root commit, working tree
-  clean, 39 files / ~11.9k insertions. The commit message was written to a scratch
-  file and passed through the machine-wide `commit-msg` hook (no AI attribution), per
-  `AGENTS.md`. No remote is configured yet.
-- **The plugin is built and verified** at `opencode-skill-state/`. Gate green under an
-  independent run: `npm run typecheck` (strict, `--noEmit`) clean; `npm run smoke` → ok.
-  Measured: outbound 61 → 14 messages, 15406 → 3642 tokens (76% saved on a 128k window),
-  idempotent (byte-identical), pairs never split, `⊕` merge semantics correct. All four
-  `AGENTS.md` hard rules hold (durable transcript untouched; safe-boundary + balanced-tail;
-  runtime owns the σ-schema; nothing outside `opencode-skill-state/` changed, the reference
-  plugin untouched).
-- Docs are consistent and committed: `AGENTS.md`, `docs/SPEC.md` (settings reconciled to the
-  real `options.json`), the feature map (`docs/features/{README,context-collapse,skill-state,skill-state-controls}.md`)
-  with real symbols + smoke-test pins, and this file. `opencode-skill-state/HOST-API-NOTES.md`
-  is the build-side host-API reference; `opencode-skill-state/SPEC.md` the design contract.
+- **v0.1 committed on `master`** — root commit, clean tree, 39 files / ~11.9k insertions.
+  No remote configured yet. v0.2 is built and verified but **uncommitted**.
+- **v0.2 adds the two `lib-1` seams** from `HOST-API-NOTES.md` "Integrate next":
+  - **durable Σ** — `ctx.storage`, key `state/<sessionID>`, in-memory LRU (`MAX_SESSIONS = 64`)
+    as a write-through cache. Reads async (a miss is one `storage.get`), the `⊕` merge stays
+    synchronous, degradation to in-memory on any store failure (never throws).
+  - **owning compaction** — `ctx.session.hook("compaction")` via `src/compaction.ts`.
+    Deterministic distillation (persisted Σ + whole-transcript seed sweep, holes only),
+    `event.result = { summary: stateMessageText(Σ, span) }`, **no model call**, and
+    `result` left unset when `hasMeaningfulState` is false. `event.messages` read-only.
+- **Gate green**: `npm run typecheck` (strict, `--noEmit`) clean; `npm run smoke` → ok.
+  The original numbers are unchanged (61 → 14 messages, 15406 → 3642 tokens) and the smoke
+  now also pins the durable write, the restart, the compaction path and its guard, the
+  no-store and broken-store degradations.
+- **New module `src/compaction.ts`**; `src/state.ts` is now async and durable; `src/seed.ts`
+  gained `seedHintsFromMessages` (whole transcript) beside `seedHints` (the kept window).
+- Docs updated in the same change: `docs/SPEC.md` (new **Compaction** section; the
+  "Σ lives in memory" bullet removed), `docs/features/` (new `compaction.md` + its index row;
+  `skill-state.md` persistence trap replaced; `context-collapse.md` and
+  `skill-state-controls.md` re-pointed at the async/durable surfaces), this file.
 
 ## Open threads
 
-- **Integrate the `lib-1` upgrades (the real SKILL.state distillation).** Two additive passes,
-  specced in `opencode-skill-state/HOST-API-NOTES.md` "Integrate next":
-  1. durable Σ via `ctx.storage` (+ in-memory LRU cache) so state survives restart;
-  2. a `ctx.session.hook("compaction", …)` that distils `event.messages` → Σ, persists it, and
-     sets `event.result = { summary: render(Σ) }` — skipping the host's summary model call.
-  After that: update `docs/features/skill-state.md`'s persistence trap + `docs/SPEC.md`'s
-  "does not" list, re-run the gate, and bump the version (a repo/commit count now exists to
-  key any derived version from, per `AGENTS.md`).
-- **Live end-to-end run** inside a real OpenCode session (the smoke test drives the transform
-  in isolation; it is not the live host). Requires the user's OK to install into a discovery dir.
+- **Commit v0.2** — `git commit -F <scratch>` through the `commit-msg` hook, no AI
+  attribution (see `AGENTS.md`). Nothing staged or committed by the implementing session.
+- **Live end-to-end run** inside a real OpenCode session — the smoke test drives a fake host,
+  not the live one. Requires the user's OK to install into a discovery dir.
 - **Install target** — project `.opencode/plugin(s)/` vs this user's `~/.config/opencode/plugins/`.
   **Ask the user; installing changes the running OpenCode.**
+- Not implemented from `HOST-API-NOTES.md`: `ctx.event.subscribe` idle flush,
+  `ctx.session.synthetic` durable turn, `Message.system()` injection role.
 - Optional: a token/percentage-gated collapse trigger alongside the turn-count gate
-  (`min` is currently turn-count, per `docs/SPEC.md`).
+  (`min` is turn-count, per `docs/SPEC.md`).
 
 ## Known gaps (volatile; the durable traps live in the feature pages)
 
-- No live OpenCode run — only the isolated smoke test has executed the transform.
-- Σ is in-memory; restart re-expands to the raw transcript (the `ctx.storage` upgrade fixes this).
-- The `compaction`-hook distillation and durable storage are **not** in shipped v0.1.
+- No live OpenCode run — only the isolated smoke test has executed both seams.
+- Native (provider-side) compaction bypasses the compaction hook's message edits; the
+  plugin's `event.result` still applies because `event.messages` is never edited.
+- A record captures the storage handle at creation, so one process has one store.
 
 ## Local-only state (not on the remote)
 

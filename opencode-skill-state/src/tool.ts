@@ -20,7 +20,7 @@ import { ackText, toolDescription } from "./prompts.ts"
 import { isPlainObject, render, STATE_KEYS, unknownKeys } from "./schema.ts"
 import { estimateTokens } from "./context.ts"
 import { stateStore } from "./state.ts"
-import type { ToolCallContext, ToolDefinition, ToolResult } from "./types.ts"
+import type { StorageDomain, ToolCallContext, ToolDefinition, ToolResult } from "./types.ts"
 
 /** The tool's name, which is also what the standing policy tells the model to call. */
 export const TOOL_NAME = "skill_state"
@@ -71,9 +71,12 @@ export function sessionIdOf(context: unknown): string | undefined {
 /**
  * Build `skill_state`.
  *
+ * @param options - the durable store, when the host has one, so a write outlives the
+ *   process that made it.
  * @returns the tool definition, ready for `tool.transform`.
  */
-export function createSkillState(): ToolDefinition {
+export function createSkillState(options: { readonly storage?: StorageDomain } = {}): ToolDefinition {
+  const storage = options.storage
   return {
     name: TOOL_NAME,
     description: toolDescription(),
@@ -110,7 +113,7 @@ export function createSkillState(): ToolDefinition {
         return textResult("summary must be one line of text.", { kind: "error" })
       }
 
-      const record = stateStore(sessionID)
+      const record = await stateStore(sessionID, { storage })
       // The step is part of the patch, not a side channel: it is a key of Σ like any
       // other, so it merges, it can be deleted, and it shows up in what changed. A write
       // with no `step` advances whatever Σ already carries — a seed or an earlier write.
@@ -119,8 +122,8 @@ export function createSkillState(): ToolDefinition {
       written["step"] = step
       const dropped = patch === undefined ? [] : unknownKeys(patch)
 
-      const changed = record.apply(written)
-      if (typeof raw?.summary === "string") record.setSummary(raw.summary)
+      const changed = await record.apply(written)
+      if (typeof raw?.summary === "string") await record.setSummary(raw.summary)
 
       const output: Record<string, unknown> = {
         kind: "state",

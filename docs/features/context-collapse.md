@@ -1,6 +1,6 @@
 # Context collapse — turn Σ into the outbound payload
 
-Status: shipped (v0.1) · Read when: outbound payload too big; Σ missing from a request; a tool call and its result were split; idempotence; the `context` hook.
+Status: shipped (v0.2) · Read when: outbound payload too big; Σ missing from a request; a tool call and its result were split; idempotence; the `context` hook.
 
 User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `../../opencode-skill-state/HOST-API-NOTES.md`.
 
@@ -8,16 +8,16 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `../../ope
 
 - Rewrites **only the outgoing request** — never the durable transcript — so the model sees `policy + Σ + recent window` instead of the whole history.
 - Injects Σ as one message (`role: user`, id `fmac_state`) placed **after the first user instruction**, so the protected head stays first.
-- Collapses the superseded prefix (turns older than `keepRecentTurns`, once past `min`) into Σ; the collapsed span is remembered per session and **re-applied on every request**.
+- Collapses the superseded prefix (turns older than `keepRecentTurns`, once past `min`) into Σ; the collapsed span is **durable** (`state/<sessionID>`) and re-applied on every request.
 - Seeds `files`/`cwd`/`activeFiles`/`step` from the surviving window, then **renders Σ once** (see the ordering trap).
 - Appends a stale-nudge only at a **balanced tail** (`inFlight === 0`).
 
 ## Map
 
-- `src/context.ts` — `runContextTransform`, `applyTransform`, `describeContext`, `measureContext`, `roughTokens`, `windowOf`, `safeBalance`, `safeSelectPrunableRange`, `messageOf`; types `TransformDeps`, the pass report.
+- `src/context.ts` — `runContextTransform` (async), `applyTransform` (async), `describeContext` (async), `measureContext`, `roughTokens`, `estimateTokens`, `windowOf`, `messageOf`, `SessionContextEventLike`, `ToolWireEntry` (the name arrives here, so no import cycle with `tool.ts`); types `TransformDeps` (now carries `storage`), the pass report.
 - `src/view.ts` — ported safe-cut helpers: `viewOf`, `turnMap`, `turnsOf`, `balanceCuts`, `selectPrunableRange`, `firstSelectableIndex`; injected-id helpers `INJECTED_ID_PREFIX` (`fmac_`), `isInjectedMessage`, `STATE_MESSAGE_ID`, `valueText`.
 - `src/prompts.ts` — `SECTION_TEXT` (standing policy), `nudgeText`, `stateMessageText`.
-- `src/index.ts` — registers the hook inside `try/catch`; wires `windows` (model windows) and the bounded `lastRequest` map.
+- `src/index.ts` — registers the hook inside `try/catch`; wires `windows` (model windows), the bounded `lastRequest` map, and `ctx.storage` into the transform's deps.
 
 ## How & why
 
@@ -35,12 +35,16 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `../../ope
 - **Re-apply path.** Once a span is committed, later passes find no fresh range but re-insert
   the remembered Σ at `firstSelectableIndex` with nothing removed — so a session stays bounded
   even when no new turns are prunable.
+- **Reads are async, the merge is not.** `describeContext` awaits the store, and a cache miss
+  costs one `storage.get`; everything the pass does with Σ afterwards is synchronous.
 - **Renderer can't leave a half-written payload:** the rendered Σ text is computed as the
   argument to `splice`, so if it threw, the array is never touched and the host's raw request
   survives. The hook's `try/catch` is the same principle at the boundary — a failed pass logs
   and the uncollapsed request continues.
 - Traps: `min` is **turn count**, not tokens; injection is `role: user` (host-proven), the
-  semantic alternative is `Message.system` (see host notes, "Open design decisions").
+  semantic alternative is `Message.system` (see host notes, "Open design decisions");
+  the wire tool offer carries the tool's **name** (`ToolWireEntry`), because `tool.transform`
+  registers a tool but only `event.tools` offers it.
 
 ## Config keys / UI
 

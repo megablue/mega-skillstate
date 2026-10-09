@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url"
 
 import { createSkillStateCommand, type SkillStateCommandOptions } from "./command.ts"
 import { PLUGIN, resolveConfig, resolveOptions } from "./config.ts"
+import { runCompaction } from "./compaction.ts"
 import { messageOf, runContextTransform, type TransformDeps } from "./context.ts"
 import { MAX_SESSIONS } from "./state.ts"
 import { TOOL_NAME, createSkillState } from "./tool.ts"
@@ -122,6 +123,9 @@ export async function setup(ctx: PluginContext): Promise<() => Promise<void>> {
   const deps: TransformDeps = {
     config,
     windows,
+    // Absent on a host without a storage seam: every use is guarded and the store
+    // degrades to in-memory, which is what this plugin did before one existed.
+    storage: ctx.storage,
     log: (line) => {
       if (config.debug === true) warn(line)
     },
@@ -145,7 +149,7 @@ export async function setup(ctx: PluginContext): Promise<() => Promise<void>> {
     }
   }
 
-  const tool = createSkillState()
+  const tool = createSkillState({ storage: ctx.storage })
   const commandOptions: SkillStateCommandOptions = {
     deps,
     payloadOf: (sessionID) => payloads.get(sessionID),
@@ -173,10 +177,33 @@ export async function setup(ctx: PluginContext): Promise<() => Promise<void>> {
             : await isChildSession(ctx, sessionID, childCache, config.allowSubagentSessions)
         // The report is returned for the caller's benefit (the smoke test reads the
         // measured numbers off it); the host ignores it.
-        return await runContextTransform(deps, event, isChild, { description: tool.description, input: tool.input })
+        return await runContextTransform(deps, event, isChild, {
+          name: TOOL_NAME,
+          description: tool.description,
+          input: tool.input,
+        })
       } catch (error) {
         // A turn must never break because a pass failed.
         warn("the context pass failed and the request continues: " + messageOf(error))
+      }
+    }),
+  )
+
+  // The compaction seam: the SKILL.state centerpiece. The model maintains Σ semantically
+  // through `skill_state` as it works; when the host needs a compaction message, this
+  // plugin hands back `render(Σ)` and no model call happens at all. `event.messages` is
+  // read and never written.
+  registrations.push(
+    await ctx.session.hook("compaction", async (event) => {
+      try {
+        const report = await runCompaction(deps, event as never)
+        if (config.debug === true) warn("compaction: " + (report.owned ? "owned" : "declined"))
+        return report
+      } catch (error) {
+        // Declining means the host summarises, which is what would have happened without
+        // this plugin at all.
+        warn("the compaction pass was refused and the host summarises: " + messageOf(error))
+        return undefined
       }
     }),
   )

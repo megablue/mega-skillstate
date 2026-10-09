@@ -26,6 +26,15 @@ this plugin gets as close as the host allows:
 Nothing here edits your transcript. The pass rewrites the payload the host is about to
 send, and it is re-derived on every request, so the conversation is always intact.
 
+**Σ is durable.** It is stored per session under the plugin's own storage, so a restart
+brings the state back rather than re-expanding the context. A store that cannot be
+reached degrades to in-memory state and says so in the log; it never breaks a session.
+
+**When the host compacts, the plugin answers with Σ.** The compaction message is the
+model's own state plus a deterministic sweep of the transcript — no summarization call
+of the plugin's own. When the distilled state has nothing to say, the host summarizes in
+its own way.
+
 ## Install
 
 The host resolves `<plugin-root>/server`, and this package needs no build step — the
@@ -57,9 +66,7 @@ is discovered. What you get:
   turns are kept, and a per-turn index of what was collapsed and what is still verbatim.
   `/skillstate now` forces a collapse on the next pass.
 
-To see what the pass decided, check `/skillstate`. To keep a session's state across a
-restart, note that Σ is held in memory for the life of the process — a restart starts the
-state over rather than corrupting it.
+To see what the pass decided, check `/skillstate`.
 
 ## Config
 

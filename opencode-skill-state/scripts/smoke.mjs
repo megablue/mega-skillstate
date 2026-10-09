@@ -94,25 +94,78 @@ function buildEvent(messages) {
   return { sessionID: "ses_smoke", agent: "build", model: MODEL, system: [], messages, tools: {} }
 }
 
-/** A fake host that records what the plugin registered. */
-function createHost() {
+/**
+ * A fake `ctx.storage`: a Map, with the real boundary semantics.
+ *
+ * Values cross it as copies, exactly as they cross the host's JSON store, so nothing in
+ * memory is aliased to what the store holds — which is what makes the restart test below
+ * a real restart instead of the same object read twice.
+ */
+function createStorage() {
+  const map = new Map()
+  const calls = { gets: [], sets: [] }
+  return {
+    map,
+    calls,
+    domain: {
+      get: async (key) => {
+        calls.gets.push(key)
+        return map.has(key) ? structuredClone(map.get(key)) : undefined
+      },
+      set: async (key, value) => {
+        calls.sets.push(key)
+        map.set(key, structuredClone(value))
+      },
+      remove: async (key) => {
+        map.delete(key)
+      },
+      scan: async () => ({}),
+    },
+  }
+}
+
+/**
+ * A fake host that records what the plugin registered.
+ *
+ * @param options.storage - `false` for a host with no storage seam at all; `"broken"` for
+ *   one whose store refuses every call, which is the degradation the plugin must survive.
+ */
+function createHost(options = {}) {
   const contextHooks = []
+  const compactionHooks = []
   const tools = []
   const commands = []
   const prompts = []
   const registration = { dispose: async () => {} }
+  const storage = options.storage === false || options.storage === "broken" ? undefined : createStorage()
+  const domain =
+    options.storage === "broken"
+      ? {
+          get: async () => {
+            throw new Error("the store is down")
+          },
+          set: async () => {
+            throw new Error("the store is down")
+          },
+        }
+      : storage !== undefined
+        ? storage.domain
+        : undefined
   return {
     tools,
     commands,
     prompts,
     contextHooks,
+    compactionHooks,
+    storage,
     context: {
       location: { directory: root },
       options: OPTIONS,
       session: {
         hook: async (name, callback) => {
-          assert.equal(name, "context", "this plugin registers a context hook")
-          contextHooks.push(callback)
+          if (name === "context") contextHooks.push(callback)
+          else if (name === "compaction") compactionHooks.push(callback)
+          else throw new Error("this plugin registers no " + name + " hook")
           return registration
         },
         get: async ({ sessionID }) => ({ id: sessionID }),
@@ -143,6 +196,7 @@ function createHost() {
           return registration
         },
       },
+      storage: domain,
     },
   }
 }
@@ -189,12 +243,17 @@ const host = createHost()
 const dispose = await plugin.default.setup(host.context)
 assert.equal(typeof dispose, "function", "setup must hand back a disposer")
 assert.equal(host.contextHooks.length, 1, "one context hook")
+assert.equal(host.compactionHooks.length, 1, "one compaction hook")
 assert.equal(host.tools.length, 1, "one tool")
 assert.equal(host.tools[0].name, "skill_state")
 assert.equal(host.commands.length, 1, "one command")
 assert.equal(host.commands[0].name, "skillstate")
 assert.ok(host.tools[0].output, "the tool declares an output schema, or the host loses its result")
-console.log("registered: 1 context hook, 1 tool (skill_state), 1 command (/skillstate)\n")
+assert.ok(host.context.storage, "the host's storage seam is wired into the plugin")
+console.log("registered: 1 context hook, 1 compaction hook, 1 tool (skill_state), 1 command (/skillstate)\n")
+
+/** The store module, so the restart test can drop the in-memory tier and keep the rest. */
+const state = await load("src/state.ts")
 
 // ---------------------------------------------------------------------------
 // The transform.
@@ -284,7 +343,6 @@ console.log("")
 // ⊕: the merge operator.
 // ---------------------------------------------------------------------------
 const schema = await load("src/schema.ts")
-
 const deleted = schema.merge({ objective: "ship the plugin", done: ["one", "two"] }, { done: null })
 assert.deepEqual(deleted, { objective: "ship the plugin" }, "a null deletes the key")
 
@@ -337,11 +395,20 @@ assert.equal(ack.output.step, stateJson.step + 1)
 assert.equal(ack.output.summary, "first write")
 row("skill_state ack", ackText.replace(/\n/g, " · "))
 
+// A tool write is durable: the store holds what the model committed, keyed by session.
+const persisted = host.storage.map.get("state/ses_smoke")
+assert.ok(persisted !== undefined, "a state write reaches the durable store")
+assert.equal(persisted.state.objective, "bound the window")
+assert.deepEqual(persisted.state.findings, ["Σ is the record"])
+assert.ok(host.storage.calls.sets.includes("state/ses_smoke"), "the write went through storage.set")
+assert.deepEqual(persisted.collapsed, { from: 2, to: 17 }, "the committed span is durable too")
+row("durable write", "state/ses_smoke persisted " + Object.keys(persisted.state).join(", "))
+
 // ---------------------------------------------------------------------------
 // The guards: the collapse is conservative by default, and a subagent keeps its own.
 // ---------------------------------------------------------------------------
-function hostWith(options, overrides = {}) {
-  const made = createHost()
+function hostWith(options, overrides = {}, storageMode = true) {
+  const made = createHost({ storage: storageMode })
   made.context.options = options
   if (overrides.parentID !== undefined) {
     made.context.session.get = async ({ sessionID }) => ({ id: sessionID, parentID: overrides.parentID })
@@ -417,6 +484,200 @@ const forced = host.prompts[1].text
 assert.ok(forced.includes("Σ already stands for turns 2-17"), forced)
 checkPairing(messages, "the payload after /skillstate now")
 row("/skillstate now", "forced a pass, left the pairs intact")
+
+// ---------------------------------------------------------------------------
+// The compaction seam: Σ handed back instead of the host's own summary request.
+// ---------------------------------------------------------------------------
+const compactionMessages = buildTranscript(6)
+const compactionEvent = {
+  sessionID: "ses_compaction",
+  agent: "build",
+  model: MODEL,
+  system: [],
+  tools: {},
+  messages: compactionMessages,
+}
+// Before the collapse, the model commits its own account of one file. The compaction
+// sweep then reads a transcript whose tool calls touch a different file, and must not
+// overwrite what the model said: a seed fills holes only.
+await host.tools[0].execute(
+  {
+    state_patch: { files: { "src/model-said.md": "the model's own account of this file" } },
+  },
+  {
+    sessionID: "ses_compaction",
+    agent: "build",
+    messageID: "msg_c1",
+    id: "call_c1",
+    signal: new AbortController().signal,
+  },
+)
+// A context pass first, so this session has actually collapsed a span: the compaction
+// summary must carry the persisted span, not a fresh guess about it.
+const compactionCollapse = await transform(compactionEvent)
+assert.equal(compactionCollapse.collapsed.from, 2, "turns 2-3 are superseded")
+assert.equal(compactionCollapse.collapsed.to, 3)
+assert.equal(compactionCollapse.collapsed.messages, 6)
+const persistedSpan = host.storage.map.get("state/ses_compaction").collapsed
+assert.deepEqual(persistedSpan, { from: 2, to: 3 }, "the committed span is durable")
+
+// The host rebuilds the transcript for the compaction request, exactly as it does for a
+// context one. Σ is served from the in-memory LRU here, so the durable read is proven by
+// the restart section below; what this pass must show is that the *persisted* span comes
+// back rather than a fresh guess about it.
+const modelCallsBefore = host.prompts.length
+const compactionRebuilt = {
+  sessionID: "ses_compaction",
+  agent: "build",
+  model: MODEL,
+  system: [],
+  tools: {},
+  messages: buildTranscript(6),
+}
+const compaction = await host.compactionHooks[0](compactionRebuilt)
+assert.equal(compaction.owned, true, "the distilled Σ was worth handing back")
+assert.equal(compaction.collapsed.from, 2, "and it carries the span it committed")
+assert.equal(compaction.collapsed.to, 3)
+assert.equal(
+  host.prompts.length,
+  modelCallsBefore,
+  "owning the compaction means no model call at all — that is the whole point",
+)
+assert.ok(compactionRebuilt.result !== undefined, "result is set when Σ has something to say")
+assert.equal(typeof compactionRebuilt.result.summary, "string")
+const summary = compactionRebuilt.result.summary
+assert.ok(summary.startsWith("<skill-state>"), summary.slice(0, 120))
+assert.ok(summary.includes("Collapsed: turns 2-3"), summary.slice(0, 400))
+assert.ok(summary.includes("the model's own account of this file"), "the model-authored files entry survives")
+assert.ok(
+  !summary.includes('"src/file1.ts"'),
+  "and the seed sweep did not clobber it with what the transcript touched",
+)
+// The transcript is read, never written.
+assert.equal(compactionRebuilt.messages.length, 1 + 6 * 3, "and must not touch the messages it read")
+assert.equal(compactionRebuilt.messages[0].id, "u_head")
+checkPairing(compactionRebuilt.messages, "the transcript a compaction hook read")
+assert.ok(
+  host.storage.calls.sets.filter((key) => key === "state/ses_compaction").length > 0,
+  "the seed sweep persists what it filled",
+)
+row("compaction", "owned the summary from Σ, no model call, transcript untouched")
+
+// The guard: an empty Σ leaves `result` unset so the host summarises in its own way.
+const emptyEvent = {
+  sessionID: "ses_compaction_empty",
+  agent: "build",
+  model: MODEL,
+  system: [],
+  tools: {},
+  messages: [],
+}
+const emptyReport = await host.compactionHooks[0](emptyEvent)
+assert.equal(emptyReport.owned, false, "nothing to say")
+assert.equal(emptyEvent.result, undefined, "an empty Σ leaves the host its own summarizer")
+row("compaction guard", "empty Σ → result unset, host summarises")
+console.log("")
+
+// ---------------------------------------------------------------------------
+// A restart: the in-memory tier is dropped, the durable store survives.
+// ---------------------------------------------------------------------------
+const restartEvent = buildEvent(buildTranscript(20))
+restartEvent.sessionID = "ses_restart"
+await host.tools[0].execute(
+  {
+    state_patch: { objective: "bound the window", findings: ["Σ outlives the process"], done: ["the wrapper module"] },
+  },
+  { sessionID: "ses_restart", agent: "build", messageID: "msg_r", id: "call_r", signal: new AbortController().signal },
+)
+const restartFirst = await transform(restartEvent)
+assert.ok(restartFirst.collapsed !== undefined, "the first pass collapses")
+const beforeRestart = restartEvent.messages[1].content[0].text
+assert.ok(beforeRestart.includes("bound the window"), "the model's own Σ is in the payload")
+assert.ok(beforeRestart.includes("Σ outlives the process"))
+const restartedKeys = new Set(Object.keys(JSON.parse(beforeRestart.slice(beforeRestart.indexOf("{"), beforeRestart.lastIndexOf("}") + 1))))
+row("Σ before restart", [...restartedKeys].join(", "))
+
+// The whole in-memory tier goes; the store does not.
+assert.ok(state.stateCount() > 1, "sessions were held in memory")
+state.resetStateStore()
+assert.equal(state.stateCount(), 0, "the in-memory map is empty — the process restarted")
+const storeOnly = host.storage.map.get("state/ses_restart")
+assert.ok(storeOnly !== undefined, "the durable store still holds it")
+assert.equal(storeOnly.state.objective, "bound the window")
+
+const readsBefore = host.storage.calls.gets.filter((key) => key === "state/ses_restart").length
+const restartSecond = await transform(restartEvent)
+assert.ok(
+  host.storage.calls.gets.filter((key) => key === "state/ses_restart").length > readsBefore,
+  "the restarted process re-read the durable store",
+)
+assert.equal(restartSecond.collapsed.messages, 0, "a second pass has nothing fresh to collapse")
+const afterRestart = restartEvent.messages[1].content[0].text
+assert.ok(afterRestart.includes("bound the window"), "Σ survived the restart")
+assert.ok(afterRestart.includes("Σ outlives the process"), "...and so did the findings")
+assert.ok(afterRestart.includes("the wrapper module"), "...and so did what the model said was done")
+checkPairing(restartEvent.messages, "the payload after a restart")
+row("restart", "in-memory dropped, Σ re-read from storage, model keys intact")
+
+// And the compaction path reads the same way: the persisted span and the model's own keys
+// come back from the store, with no memory tier to serve them. The transform above put
+// the session back in the LRU, so the tier is dropped once more immediately before.
+state.resetStateStore()
+const compactionReads = host.storage.calls.gets.filter((key) => key === "state/ses_restart").length
+const compactionAfterRestart = await host.compactionHooks[0]({
+  sessionID: "ses_restart",
+  agent: "build",
+  model: MODEL,
+  system: [],
+  tools: {},
+  messages: buildTranscript(6),
+})
+assert.ok(
+  host.storage.calls.gets.filter((key) => key === "state/ses_restart").length > compactionReads,
+  "the compaction pass after a restart reads the durable store",
+)
+assert.equal(compactionAfterRestart.owned, true, "and still has something worth saying")
+assert.ok(
+  compactionAfterRestart.notes.every((note) => !/could not be read/.test(note)),
+  "with no store failure to report",
+)
+checkPairing(restartEvent.messages, "the transcript after a restarted compaction")
+row("compaction after restart", "persisted Σ and span re-read from storage")
+
+// ---------------------------------------------------------------------------
+// Degradation: a host with no store, and a host whose store refuses everything.
+// ---------------------------------------------------------------------------
+const noStore = hostWith({ keepRecentTurns: 4, min: 4 }, undefined, false)
+await plugin.default.setup(noStore.context)
+const noStoreEvent = buildEvent(buildTranscript(20))
+await noStore.contextHooks[0](noStoreEvent)
+assert.equal(noStoreEvent.messages.length, 14, "a host with no storage seam still collapses")
+assert.equal(noStoreEvent.messages[1].id, "fmac_state")
+checkPairing(noStoreEvent.messages, "the payload on a host with no store")
+row("no storage seam", "in-memory only, the collapse is unchanged")
+
+const brokenStore = hostWith({ keepRecentTurns: 4, min: 4, debug: true }, undefined, "broken")
+await plugin.default.setup(brokenStore.context)
+// Capture what the plugin logs, so the degradation is proven rather than assumed: a
+// store that refuses must be *reported*, never thrown, and never silently swallowed.
+const logged = []
+const realError = console.error
+console.error = (line) => logged.push(String(line))
+const brokenEvent = buildEvent(buildTranscript(20))
+brokenEvent.sessionID = "ses_broken"
+const brokenReport = await brokenStore.contextHooks[0](brokenEvent)
+console.error = realError
+assert.equal(brokenReport.turns, 21, "the pass measured the whole transcript anyway")
+assert.ok(
+  logged.some((line) => line.includes("the durable store could not be read for ses_broken")),
+  "the refused read was reported: " + JSON.stringify(logged),
+)
+assert.ok(logged.some((line) => line.includes("refused state/ses_broken")), "and so was the refused write")
+assert.equal(brokenEvent.messages.length, 14, "a store that refuses everything still collapses")
+assert.equal(brokenEvent.messages[1].id, "fmac_state", "and Σ is still injected")
+assert.deepEqual(brokenReport.notes, [], "and no failure escapes into the request's account")
+checkPairing(brokenEvent.messages, "the payload on a host with a broken store")
+row("broken store", "degraded to in-memory, reported, never threw")
 console.log("")
 
 await dispose().catch(() => {})

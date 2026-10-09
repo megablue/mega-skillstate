@@ -1,8 +1,8 @@
 # skill_state tool & /skillstate command
 
-Status: shipped (v0.1) · Read when: the model updating Σ; `state_patch`; the ack a tool returns; a tool that is registered but never called; `/skillstate`; forcing a collapse; the stale reminder.
+Status: shipped (v0.2) · Read when: the model updating Σ; `state_patch`; the ack a tool returns; a tool that is registered but never called; `/skillstate`; forcing a collapse; the stale reminder.
 
-User-visible behavior: `docs/SPEC.md` → Settings/controls.
+User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 
 ## What it does
 
@@ -18,15 +18,17 @@ User-visible behavior: `docs/SPEC.md` → Settings/controls.
 
 ## Map
 
-- `src/tool.ts` — `TOOL_NAME = "skill_state"`, `createSkillState`; the `execute` runs the ⊕
-  patch, handles `Σ.step`, and returns the text ack.
-- `src/command.ts` — `createSkillStateCommand`; `/skillstate` and `/skillstate now`.
+- `src/tool.ts` — `TOOL_NAME = "skill_state"`, `TOOL_INPUT`, `createSkillState({ storage })`,
+  `sessionIdOf`, `textResult`; the `execute` runs the ⊕ patch, handles `Σ.step`, persists
+  through the store, and returns the text ack.
+- `src/command.ts` — `createSkillStateCommand`, `stateReport`, `COMMAND_NAME`;
+  `/skillstate` and `/skillstate now` (a forced, awaited pass).
 - `src/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
-  `toolDescription`, the ack format.
+  `toolDescription`, `schemaText`, the ack format.
 - `src/config.ts` — `resolveOptions` (reads `options.json` and `ctx.options`), `resolveConfig`
   (strict: unknown keys throw), `resolveThresholds`, `DEFAULT_CONFIG`.
-- `src/index.ts` — registers the tool **and** the command; wires `lastRequest` so `/skillstate`
-  can report on the in-flight conversation.
+- `src/index.ts` — registers the tool **and** the command; wires `lastRequest` and
+  `ctx.storage` into both, so a `/skillstate now` pass is durable too.
 
 ## How & why
 
@@ -34,6 +36,12 @@ User-visible behavior: `docs/SPEC.md` → Settings/controls.
   `dropped (not in the schema):` keys, so the model learns the schema from its own writes and
   stops trying to set keys the runtime will drop. It reads the report off the context pass, so
   the numbers match what the model just saw.
+- **A state write is durable.** The tool's `execute` loads through `stateStore` (cache first,
+  then `storage.get`) and `apply` writes through, so the write outlives the request it came
+  from — and the collapse and compaction seams see it on the same pass.
+- **`/skillstate now` is a forced pass, not a bypass.** It skips only the `min`-turn gate; the
+  safe-cut rules, the protected head and the balanced-tail rule still apply. It orchestrates
+  `applyTransform` directly and replies with the measured numbers.
 - **Two hard-won registration facts.** A tool must be added **both** at the registry
   (`ctx.tool.transform`) *and* onto the wire (`event.tools[TOOL_NAME]` in the context hook with
   its `input` **and** `output` schema) — a tool only on the registry is never available to the
@@ -44,6 +52,8 @@ User-visible behavior: `docs/SPEC.md` → Settings/controls.
 - Traps: tool **output values must be copied** before shipping so a host mutation can't touch
   plugin-owned state (stale after repair); never log tool results (they can impersonate the
   model); `manualCommand: false` removes the command but leaves the tool and the pass intact.
+- Trap — the tool's `execute` runs against the **durable** store, so a write from a session
+  whose request never reached the context hook still lands (a session created outside a turn).
 
 ## Config keys / UI
 
@@ -57,9 +67,9 @@ User-visible behavior: `docs/SPEC.md` → Settings/controls.
 ## Tests that pin it
 
 `scripts/smoke.mjs` — the `skill_state` ack (`updated → step 5 (changed: objective, findings,
-step) · dropped (not in the schema): not_a_key`), `/skillstate` prints Σ + the per-turn index,
-`/skillstate now` forces a pass leaving pairs intact, stale reminder appended only at a
-balanced tail.
+step) · dropped (not in the schema): not_a_key`), **the durable write** it persists, `/skillstate`
+prints Σ + the per-turn index, `/skillstate now` forces a pass leaving pairs intact, stale
+reminder appended only at a balanced tail.
 
 ## Related
 

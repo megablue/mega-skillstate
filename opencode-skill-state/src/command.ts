@@ -115,10 +115,10 @@ export function stateReport(descriptor: ContextDescriptor): string {
  * @returns the command definition, ready for `command.transform`.
  */
 export function createSkillStateCommand(options: SkillStateCommandOptions): CommandDefinition {
-  const describeFor = (sessionID: string): ContextDescriptor | undefined => {
+  const describeFor = async (sessionID: string): Promise<ContextDescriptor | undefined> => {
     const payload = options.payloadOf(sessionID)
     if (payload === undefined) return undefined
-    return describeContext(options.deps, {
+    return await describeContext(options.deps, {
       sessionID,
       model: payload.model,
       system: payload.system,
@@ -143,7 +143,7 @@ export function createSkillStateCommand(options: SkillStateCommandOptions): Comm
           await say("No request has been seen for this session yet, so there is nothing to collapse.")
           return
         }
-        const report = applyTransform(options.deps, {
+        const report = await applyTransform(options.deps, {
           sessionID,
           model: payload.model,
           system: payload.system,
@@ -171,7 +171,7 @@ export function createSkillStateCommand(options: SkillStateCommandOptions): Comm
         return
       }
 
-      const descriptor = describeFor(sessionID)
+      const descriptor = await describeFor(sessionID)
       if (descriptor === undefined) {
         await say("No request has been seen for this session yet, so there is nothing to measure.")
         return

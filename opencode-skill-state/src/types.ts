@@ -210,6 +210,52 @@ export interface PluginContext {
   readonly tool: ToolDomain
   readonly command: CommandDomain
   readonly model: ModelDomain
+  /**
+   * Plugin-scoped durable key/value, namespaced by the plugin's id.
+   *
+   * Optional in this mirror on purpose: a host that has no storage seam is a host this
+   * plugin runs in-memory on, and a plugin that cannot start without one loses the
+   * session it was meant to help. Every use is guarded and degrades.
+   */
+  readonly storage?: StorageDomain
+}
+
+// ---------------------------------------------------------------------------
+// The durable store, and the compaction seam
+// ---------------------------------------------------------------------------
+
+/**
+ * The plugin-scoped KV, as `ctx.storage` hands it over.
+ *
+ * Values are JSON, so what this plugin puts through it is plain data — the state, the
+ * span it has collapsed, the note the model wrote — and never a live object from a
+ * request.
+ */
+export interface StorageDomain {
+  get(key: string): Promise<unknown>
+  set(key: string, value: unknown): Promise<void>
+  remove?(key: string): Promise<void>
+  scan?(options: unknown): Promise<unknown>
+}
+
+/**
+ * The `compaction` event: the transcript the host is about to summarise, and the result
+ * that replaces its own summarizer.
+ *
+ * Setting `result` means the host persists that string as the compaction message and
+ * makes no model call of its own. `messages` is readable and deliberately never written
+ * to: this plugin owns the *content* of the summary, not the transcript it came from.
+ */
+export interface CompactionEvent {
+  readonly sessionID: any
+  readonly model: any
+  readonly agent: any
+  readonly system: SystemPart[]
+  readonly messages: Message[]
+  readonly tools: Record<string, any>
+  /** Set to use this compaction and skip the host's summary request. */
+  result?: { readonly summary: string; readonly [key: string]: any }
+  readonly [key: string]: any
 }
 
 // ---------------------------------------------------------------------------

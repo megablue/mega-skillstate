@@ -24,11 +24,14 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 - `src/command.ts` — `createSkillStateCommand`, `stateReport`, `COMMAND_NAME`;
   `/skillstate` and `/skillstate now` (a forced, awaited pass).
 - `src/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
-  `toolDescription`, `schemaText`, the ack format.
+  `toolDescription`, `schemaText`, `ackText` (the ack format).
 - `src/config.ts` — `resolveOptions` (reads `options.json` and `ctx.options`), `resolveConfig`
   (strict: unknown keys throw), `resolveThresholds`, `DEFAULT_CONFIG`.
-- `src/index.ts` — registers the tool **and** the command; wires `lastRequest` and
+- `src/index.ts` — registers the tool **and** the command; wires the `payloads` map and
   `ctx.storage` into both, so a `/skillstate now` pass is durable too.
+- `scripts/install.ts` — the installer: `parseArgs`, `packageRoot`, `userPluginDir`,
+  `projectPluginDir`, `discoveryDirs`, `isLink`, `installInto`, `uninstallFrom`, `run`,
+  `statusLines`. Three modes (`--project`, `--remove`, `--status`) over one script.
 
 ## How & why
 
@@ -47,13 +50,38 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   its `input` **and** `output` schema) — a tool only on the registry is never available to the
   model, and one called without an `output` schema makes the host reject it. There is no
   `noReply`/agent flag; write-paths return plain output and the user simply is not addressed.
-- **The command reads the same measured context** the transform used (`lastRequest`), so
-  `/skillstate` cannot disagree with the payload the model is about to receive.
+- **The command reads the same measured context** the transform used (the `payloads`
+  map), so `/skillstate` cannot disagree with the payload the model is about to receive.
 - Traps: tool **output values must be copied** before shipping so a host mutation can't touch
   plugin-owned state (stale after repair); never log tool results (they can impersonate the
   model); `manualCommand: false` removes the command but leaves the tool and the pass intact.
 - Trap — the tool's `execute` runs against the **durable** store, so a write from a session
   whose request never reached the context hook still lands (a session created outside a turn).
+
+### Install & uninstall (`scripts/install.ts`)
+
+- **The install is a link, not a copy.** The host discovers a plugin by resolving
+  `<root>/server(.ts|.js)` inside `~/.config/opencode/plugins/` (user scope) or
+  `<project>/.opencode/plugin/` (project scope). Nothing else is required: no global config
+  entry, no build step, no dependency to install. So the installer's whole job is to put a
+  link in the right directory — which is why it is a script rather than a package manifest.
+- **The link makes a checkout live.** An edit to `src/` is picked up on the next request,
+  so the plugin under test is always this working tree. The trade is a second place the
+  repo can break: a junction pointing at a deleted directory is *discovered as a plugin that
+  fails to load*, indistinguishable from a broken one.
+- **Trap — a link is deleted without recursion.** `rmSync(path, { recursive: true })` on a
+  junction follows the link and deletes the *target's* contents — this repository included.
+  `removeLink` therefore uses `lstatSync` to tell a link from a real directory and issues a
+  bare `rmSync` for a link. Never `Remove-Item -Recurse` one by hand.
+- **Trap — a stale link is replaced, not re-used.** `installInto` reads what the link
+  currently points at (`readlinkSync`); a link to anywhere other than this package root is
+  removed and re-created. Idempotence is checked on the *target*, not on the link's presence.
+- **A code change needs a restart.** The host does not watch module files; the plugin row is
+  resolved once per server process. `plugin:status` reports what the *filesystem* says, which
+  is why it can disagree with a running host that has not re-scanned. See the restart trap in
+  `HANDOFF.md`.
+- **npm swallows flags.** `npm run plugin:uninstall -- --project` — without the second `--`,
+  `--project` is consumed by npm and never reaches the script.
 
 ## Config keys / UI
 

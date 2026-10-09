@@ -680,5 +680,74 @@ checkPairing(brokenEvent.messages, "the payload on a host with a broken store")
 row("broken store", "degraded to in-memory, reported, never threw")
 console.log("")
 
+// ---------------------------------------------------------------------------
+// The installer: link, idempotence, and the one rule that can destroy work.
+//
+// `scripts/install.ts` runs against a scratch directory, never against the real
+// discovery dirs, so the smoke test can prove the destructive case without being
+// destructive. The rule under test is `removeLink`: a junction is deleted with a
+// bare rmSync, never a recursive one, because recursing follows the link and
+// deletes the *target's* contents.
+// ---------------------------------------------------------------------------
+{
+  const { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } = await import("node:fs")
+  const { tmpdir } = await import("node:os")
+  const { join } = await import("node:path")
+
+  const install = await import("./install.ts")
+  const scratch = mkdtempSync(join(tmpdir(), "skill-state-install-"))
+  const linkDir = join(scratch, "plugins")
+  const linkPath = join(linkDir, "opencode-skill-state")
+
+  // A package root that looks enough like one: the loader's entry has to exist.
+  const fakeRoot = join(scratch, "package")
+  mkdirSync(fakeRoot, { recursive: true })
+  writeFileSync(join(fakeRoot, "server.ts"), "// a stand-in for the host entry\n")
+  writeFileSync(join(fakeRoot, "keep.txt"), "the target's own content\n")
+
+  try {
+    const first = install.installInto(linkDir, fakeRoot)
+    assert.equal(first.action, "linked", "the first install creates the link")
+    assert.ok(existsSync(linkPath), "the link exists on disk")
+    assert.ok(lstatSync(linkPath).isSymbolicLink(), "and it is a link, not a copy")
+    assert.equal(install.installInto(linkDir, fakeRoot).action, "current", "a second install is a no-op")
+    assert.ok(existsSync(join(linkPath, "keep.txt")), "the link resolves into the target")
+
+    // A link pointing somewhere else is replaced rather than trusted.
+    const staleTarget = join(scratch, "stale")
+    mkdirSync(staleTarget, { recursive: true })
+    writeFileSync(join(staleTarget, "server.ts"), "// a deleted checkout's stand-in\n")
+    rmSync(linkPath)
+    symlinkSync(staleTarget, linkPath, "junction")
+    assert.equal(install.installInto(linkDir, fakeRoot).action, "replaced", "a stale link is replaced")
+    assert.ok(existsSync(join(linkPath, "keep.txt")), "and it now points at this package")
+
+    // The destructive case: removing a link must leave the target's contents alone.
+    // A recursive rmSync here would delete `fakeRoot` — this repository, in production.
+    install.uninstallFrom(linkDir)
+    assert.equal(existsSync(linkPath), false, "the link is gone")
+    assert.equal(existsSync(join(fakeRoot, "keep.txt")), true, "the target's contents survive")
+    assert.equal(existsSync(join(fakeRoot, "server.ts")), true, "so does the host entry")
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+
+  row("install", "linked, idempotent, stale links replaced, target survives")
+
+  // Three modes, and the flag parser rejects anything it does not know.
+  assert.deepEqual(
+    install.parseArgs(["--project"]),
+    { project: true, remove: false, status: false },
+    "--project selects the project scope",
+  )
+  assert.deepEqual(
+    install.parseArgs(["--remove"]),
+    { project: false, remove: true, status: false },
+    "--remove uninstalls",
+  )
+  assert.throws(() => install.parseArgs(["--instal"]), /unknown argument/, "a typo'd flag is refused, not ignored")
+  row("install args", "three modes, an unknown flag is an error")
+}
+
 await dispose().catch(() => {})
 console.log("\nsmoke: ok")

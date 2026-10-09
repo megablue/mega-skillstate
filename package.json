@@ -13,12 +13,18 @@
   "files": [
     "server.ts",
     "src",
+    "scripts",
+    "options.json",
     "README.md"
   ],
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "smoke": "node scripts/smoke.mjs ."
+    "smoke": "node scripts/smoke.mjs .",
+    "plugin:install": "node scripts/install.ts",
+    "plugin:install:project": "node scripts/install.ts --project",
+    "plugin:uninstall": "node scripts/install.ts --remove",
+    "plugin:status": "node scripts/install.ts --status"
   },
   "devDependencies": {
     "@opencode/plugin": "2.0.26",

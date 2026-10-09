@@ -37,28 +37,38 @@ its own way.
 
 ## Install
 
-The host resolves `<plugin-root>/server`, and this package needs no build step — the
-TypeScript source is loaded directly.
+One command, from this repository. There is no build step: the host resolves
+`<plugin-root>/server` and loads the TypeScript source directly.
 
-**User scope** (every project):
+    npm run plugin:install            # user scope: every project on this machine
+    npm run plugin:install:project    # project scope: this repository only
 
-```
-robocopy . "%USERPROFILE%\.config\opencode\plugins\opencode-skill-state" *.ts *.json *.md /E /XD node_modules docs .git .opencode
-```
+Both create a **link** rather than a copy, so the plugin under test is the one in this
+working tree — an edit to `src/` is live on the next request, which is what makes a
+development checkout usable. The user scope is `~/.config/opencode/plugins/`; the project
+scope is `<this repo>/.opencode/plugin/`. Both discovery directories are read.
 
-That copies the shippable subset only — `server.ts`, `src/`, `options.json`,
-`package.json`, `package-lock.json`, `README.md`, `SPEC.md`, `HOST-API-NOTES.md`. The package
-is the repo root, so "this directory" would otherwise mean the whole repo, paper and `.git`
-included. Run `npm install` in the destination only if you want the typecheck and smoke test
-there too; the host loads the TypeScript source directly and needs no node_modules.
+**Restart OpenCode after installing, and after any code change.** The host does not watch
+module files; the profile loads them once per process. Editing `docs/` needs nothing.
 
-**Project scope** (one project only):
+To see where the plugin is discoverable from without changing anything:
 
-```
-robocopy . "<project>\.opencode\plugin\opencode-skill-state" *.ts *.json *.md /E /XD node_modules docs .git .opencode
-```
+    npm run plugin:status
 
-Both discovery directories are read (`.opencode/plugin/` and `.opencode/plugins/`).
+To remove it:
+
+    npm run plugin:uninstall            # user scope
+    npm run plugin:uninstall -- --project   # project scope
+
+The installer is idempotent: re-running `plugin:install` when the link is already correct
+changes nothing, and a link pointing anywhere else — including at a directory that no
+longer exists — is replaced rather than left to fail as a broken plugin.
+
+> **Why the link is not a copy.** A junction that points at a deleted directory is
+> discovered as a plugin that then fails to load, which is indistinguishable from a
+> broken plugin. If you move or rename this checkout, re-run `plugin:install` to repoint
+> it, and do so *before* deleting the old directory. Deleting a junction with
+> `Remove-Item -Recurse` can follow the link and delete the repository's contents.
 
 ## Using it
 

@@ -19,10 +19,7 @@ refactors with no behavior, mechanism, config or test change need no edit.
 | Context collapse | [context-collapse.md](context-collapse.md) | outbound payload too big; Σ missing from a request; a tool call and its result were split; idempotence; the `context` hook |
 | Σ store & schema | [skill-state.md](skill-state.md) | Σ fields; a null that should delete; an unknown key that should be dropped; arrays replace vs merge; seeding from tools; state persistence / restart; render |
 | Compaction | [compaction.md](compaction.md) | the host asks for a compaction; a summary that lost the plan; Σ that never reaches a compaction; a restart before compaction |
-| skill_state tool & /skillstate | [skill-state-controls.md](skill-state-controls.md) | the model updating Σ; `state_patch`; the ack; a tool registered but never called; `/skillstate`; forcing a collapse; the stale reminder |
-| Context collapse | [context-collapse.md](context-collapse.md) | outbound payload too big; Σ missing from a request; a tool call and its result were split; idempotence; the `context` hook |
-| Σ store & schema | [skill-state.md](skill-state.md) | Σ fields; a null that should delete; an unknown key that should be dropped; arrays replace vs merge; seeding from tools; state persistence / restart; render |
-| skill_state tool & /skillstate | [skill-state-controls.md](skill-state-controls.md) | the model updating Σ; `state_patch`; the ack; a tool that is registered but never called; `/skillstate`; forcing a collapse; the stale reminder |
+| skill_state tool & /skillstate | [skill-state-controls.md](skill-state-controls.md) | the model updating Σ; `state_patch`; the ack; a tool registered but never called; `/skillstate`; forcing a collapse; the stale reminder; **installing or uninstalling the plugin** |
 
 <!-- One row per feature page (added as pages land). Keep "Read when" a trigger
 someone would search for — the file, the symbol, the symptom — not a

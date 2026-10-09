@@ -9,8 +9,9 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-10` — `master` carries v0.1, v0.2, the paper-untrack commit and the
-flatten. `2026-10-09` was v0.1.
+As of `2026-10-10` — `master` is `983b877` ← `b15fc35` ← `c15c38e` (v0.2) ← `ab08b26` (v0.1).
+`2026-10-09` was v0.1. `b15fc35` untracked the paper; `983b877` flattened the package.
+Both are structural: no behaviour was meant to change, and the pinning numbers confirm it.
 
 ## State
 
@@ -49,6 +50,14 @@ flatten. `2026-10-09` was v0.1.
   "Σ lives in memory" bullet removed), `docs/features/` (new `compaction.md` + its index row;
   `skill-state.md` persistence trap replaced; `context-collapse.md` and
   `skill-state-controls.md` re-pointed at the async/durable surfaces), this file.
+- **Both commits are behaviour-neutral and measured so.** `git ls-files` is 30 (41 minus the
+  11 paper files); `node_modules` and the paper are ignored; zero untracked files. The
+  junction repoint was verified by resolving `server.ts` through it (`Test-Path` → True), not
+  by assuming the link worked.
+- **A trap worth naming: the live install is a junction, so a structural move can break
+  discovery without touching code.** `.opencode/plugin/opencode-skill-state` points at the
+  repo root now; before the flatten it pointed at the nested package directory. See the
+  junction bullet at the top of this section — repoint before deleting, never recurse.
 
 ## Open threads
 
@@ -75,6 +84,23 @@ flatten. `2026-10-09` was v0.1.
 - Native (provider-side) compaction bypasses the compaction hook's message edits; the
   plugin's `event.result` still applies because `event.messages` is never edited.
 - A record captures the storage handle at creation, so one process has one store.
+- **The feature-map index has duplicate rows.** `docs/features/README.md` listed Context
+  collapse, Σ store & schema, and skill_state & /skillstate **twice** — rows 19–22 and
+  rows 23–25 differ only by one word ("a tool registered" vs "a tool that is registered").
+  Fixed on `2026-10-10`: the duplicate block was removed and the surviving `skill_state` row
+  gained the install/uninstall trigger. The check that finds it is `git grep` a feature name
+  over the index — two hits means it came back.
+- **`opencode plugin list` prints a stale row, and nothing on disk is wrong.** After the
+  flatten it showed `opencode-skill-state` → `…/opencode-g-skill-state/opencode-skill-state/
+  server.ts`, a directory that no longer exists. Searched on `2026-10-10`: **no config,
+  state, cache or database file holds it.** `~/.config/opencode/` has zero hits;
+  `opencode.db` has no plugin-registry table (its only plugin-named row is this plugin's own
+  `kv` state, from `src/state.ts`); `opencode.json`'s `plugins` array is only
+  `//@tarquinen/opencode-dcp@latest` and `oh-my-opencode-slim`. The string survives only in
+  `~/.local/share/opencode/log/opencode.log` (a log) and in the **running server's
+  in-memory resolution** — the server had not re-scanned since the `git mv`. Clearing the
+  row is therefore an `opencode` **server restart**, not a config edit, and the junction is
+  already correct. Do not go hunting for it again.
 
 ## Local-only state (not on the remote)
 

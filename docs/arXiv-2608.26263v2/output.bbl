@@ -1,0 +1,139 @@
+\begin{thebibliography}{27}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem[{Badhe et~al.(2026)Badhe, Shah, Tiwari, and Kathrotia}]{badhe2026systematic}
+Sanket Badhe, Deep Shah, Priyanka Tiwari, and Nehal Kathrotia. 2026.
+\newblock A systematic survey of agent skills: Lifecycle, taxonomy, and security.
+\newblock \emph{Taxonomy, and Security (July 31, 2026)}.
+
+\bibitem[{Badhe and Tiwari(2026)}]{badhe2026agentskillsecuritythreat}
+Sanket Badhe and Priyanka Tiwari. 2026.
+\newblock \href {https://arxiv.org/abs/2607.13987} {Agent skill security: Threat models, attacks, defenses, and evaluation}.
+\newblock \emph{Preprint}, arXiv:2607.13987.
+
+\bibitem[{Chhikara et~al.(2025)Chhikara, Khant, Aryan, Singh, and Yadav}]{chhikara2025mem0}
+Prateek Chhikara, Dev Khant, Saket Aryan, Taranjeet Singh, and Deshraj Yadav. 2025.
+\newblock Mem0: Building production-ready ai agents with scalable long-term memory.
+\newblock \emph{arXiv preprint arXiv:2504.19413}.
+
+\bibitem[{Heck et~al.(2020)Heck, van Niekerk, Lubis, Geishauser, Lin, Moresi, and Ga{\v{s}}i{\'c}}]{heck2020trippy}
+Michael Heck, Carel van Niekerk, Nurul Lubis, Christian Geishauser, Hsien-chin Lin, Marco Moresi, and Milica Ga{\v{s}}i{\'c}. 2020.
+\newblock Trippy: A triple copy strategy for value-independent neural dialog state tracking.
+\newblock In \emph{Proceedings of the 21th Annual Meeting of the Special Interest Group on Discourse and Dialogue}, pages 35--44.
+
+\bibitem[{Henderson et~al.(2014)Henderson, Thomson, and Williams}]{henderson2014second}
+Matthew Henderson, Blaise Thomson, and Jason~D Williams. 2014.
+\newblock The second dialog state tracking challenge.
+\newblock In \emph{Proceedings of the 15th Annual Meeting of the Special Interest Group on Discourse and Dialogue (SIGDIAL)}, pages 263--272.
+
+\bibitem[{Hosseini-Asl et~al.(2020)Hosseini-Asl, McCann, Wu, Yavuz, and Socher}]{hosseini2020simple}
+Ehsan Hosseini-Asl, Bryan McCann, Chien-Sheng Wu, Semih Yavuz, and Richard Socher. 2020.
+\newblock A simple language model for task-oriented dialogue.
+\newblock \emph{Advances in Neural Information Processing Systems}, 33:20179--20191.
+
+\bibitem[{Jiang et~al.(2023)Jiang, Wu, Lin, Yang, and Qiu}]{jiang2023llmlingua}
+Huiqiang Jiang, Qianhui Wu, Chin-Yew Lin, Yuqing Yang, and Lili Qiu. 2023.
+\newblock {LLMLingua}: Compressing prompts for accelerated inference of large language models.
+\newblock In \emph{Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (EMNLP)}, pages 13358--13376.
+
+\bibitem[{Li et~al.(2023)Li, Dong, Zhang, Wang, Xu, Chen, and Ren}]{li2023compressing}
+Yucheng Li, Bo~Dong, Frank Zhang, Dong Wang, Yanzhao Xu, Xinyu Chen, and Xiang Ren. 2023.
+\newblock Compressing context to enhance inference efficiency of large language models.
+\newblock In \emph{Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (EMNLP)}, pages 6342--6353.
+
+\bibitem[{Liu et~al.(2024)Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, and Liang}]{liu2024lost}
+Nelson~F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, and Percy Liang. 2024.
+\newblock \href {https://doi.org/10.1162/tacl_a_00638} {Lost in the middle: How language models use long contexts}.
+\newblock \emph{Transactions of the Association for Computational Linguistics}, 12:157--173.
+
+\bibitem[{Mialon et~al.(2023)Mialon, Dessi, Lomeli, Nalmpantis, Pasunuru, Raileanu, Roziere, Schick, Dwivedi-Yu, Celikyilmaz, Grave, LeCun, and Scialom}]{mialon2023augmented}
+Gr{\'e}goire Mialon, Roberto Dessi, Maria Lomeli, Christoforos Nalmpantis, Ramakanth Pasunuru, Roberta Raileanu, Baptiste Roziere, Timo Schick, Jane Dwivedi-Yu, Asli Celikyilmaz, Edouard Grave, Yann LeCun, and Thomas Scialom. 2023.
+\newblock \href {https://openreview.net/forum?id=jh7wH2AzKK} {Augmented language models: a survey}.
+\newblock \emph{Transactions on Machine Learning Research}.
+\newblock Survey Certification.
+
+\bibitem[{Packer et~al.(2023)Packer, Fang, Patil, Lin, Wooders, and Gonzalez}]{packer2023memgpt}
+Charles Packer, Vivian Fang, Shishir\_G Patil, Kevin Lin, Sarah Wooders, and Joseph\_E Gonzalez. 2023.
+\newblock Memgpt: towards llms as operating systems.
+
+\bibitem[{Park et~al.(2023)Park, O'Brien, Cai, Morris, Liang, and Bernstein}]{park2023generative}
+Joon~Sung Park, Joseph~C O'Brien, Carrie~J Cai, Meredith~Ringel Morris, Percy Liang, and Michael~S Bernstein. 2023.
+\newblock Generative agents: Interactive simulacra of human behavior.
+\newblock In \emph{Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology (UIST)}.
+
+\bibitem[{Qin et~al.(2024)Qin, Liang, Ye, Zhu, Yan, Lu, Lin, Cong, Tang, Qian et~al.}]{qin2023toolllm}
+Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian, and 1 others. 2024.
+\newblock {ToolLLM}: Facilitating large language models to master 16000+ real-world apis.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}.
+
+\bibitem[{Rastogi et~al.(2020)Rastogi, Zang, Sunkara, Gupta, and Khaitan}]{rastogi2020towards}
+Abhinav Rastogi, Xiaoxue Zang, Srinivas Sunkara, Raghav Gupta, and Pranav Khaitan. 2020.
+\newblock Towards scalable multi-domain conversational agents: The schema-guided dialogue dataset.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial Intelligence}, volume~34, pages 8689--8696.
+
+\bibitem[{Schick et~al.(2023)Schick, Dwivedi-Yu, Dess{\`\i}, Raileanu, Lomeli, Zettlemoyer, Cancedda, and Scialom}]{schick2023toolformer}
+Timo Schick, Jane Dwivedi-Yu, Roberto Dess{\`\i}, Roberta Raileanu, Maria Lomeli, Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. 2023.
+\newblock {Toolformer}: Language models can teach themselves to use tools.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}.
+
+\bibitem[{Wang et~al.(2023)Wang, Dong, Cheng, Liu, Yan, Gao, and Wei}]{xu2023longllmem}
+Weizhi Wang, Li~Dong, Hao Cheng, Xiaodong Liu, Xifeng Yan, Jianfeng Gao, and Furu Wei. 2023.
+\newblock Augmenting language models with long-term memory.
+\newblock \emph{Advances in Neural Information Processing Systems (NeurIPS)}.
+
+\bibitem[{Williams et~al.(2013)Williams, Raux, Ramachandran, and Black}]{williams2013dialog}
+Jason Williams, Antoine Raux, Deepak Ramachandran, and Alan Black. 2013.
+\newblock The dialog state tracking challenge.
+\newblock In \emph{Proceedings of the SIGDIAL 2013 Conference}, pages 404--413.
+
+\bibitem[{Wu et~al.(2019)Wu, Madotto, Hosseini-Asl, Xiong, Socher, and Fung}]{wu2019transferable}
+Chien-Sheng Wu, Andrea Madotto, Ehsan Hosseini-Asl, Caiming Xiong, Richard Socher, and Pascale Fung. 2019.
+\newblock Transferable multi-domain state generator for task-oriented dialogue systems.
+\newblock In \emph{Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics}, pages 808--819.
+
+\bibitem[{Wu et~al.(2023)Wu, Bansal, Zhang, Wu, Li, Zhu, Jiang, Zhang, Zhang, Liu et~al.}]{wu2023autogen}
+Qingyun Wu, Gagan Bansal, Jieyu Zhang, Yiran Wu, Beibin Li, Erkang Zhu, Li~Jiang, Xiaoyun Zhang, Shaokun Zhang, Jiale Liu, and 1 others. 2023.
+\newblock {AutoGen}: Enabling next-gen llm applications via multi-agent conversation.
+\newblock \emph{arXiv preprint arXiv:2308.08155}.
+
+\bibitem[{Xiao et~al.(2024{\natexlab{a}})Xiao, Tian, Chen, Han, and Lewis}]{xiao2023streamingllm}
+Guangxuan Xiao, Yuandong Tian, Beidi Chen, Song Han, and Mike Lewis. 2024{\natexlab{a}}.
+\newblock Efficient streaming language models with attention sinks.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}.
+
+\bibitem[{Xiao et~al.(2024{\natexlab{b}})Xiao, Tian, Chen, Han, and Lewis}]{xiao2024streamingllm}
+Guangxuan Xiao, Yuandong Tian, Beidi Chen, Song Han, and Mike Lewis. 2024{\natexlab{b}}.
+\newblock Efficient streaming language models with attention sinks.
+\newblock In \emph{International Conference on Learning Representations}, volume 2024, pages 21875--21895.
+
+\bibitem[{Yang et~al.(2023)Yang, Prabhakar, Narasimhan, and Yao}]{yang2023intercode}
+John Yang, Akshara Prabhakar, Karthik Narasimhan, and Shunyu Yao. 2023.
+\newblock {InterCode}: Standardizing and benchmarking interactive coding with execution feedback.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}.
+
+\bibitem[{Yao et~al.(2024)Yao, Shinn, Zhao, Wu, and Narasimhan}]{yao2024tau}
+Shunyu Yao, Noah Shinn, Jeffrey Zhao, Qingyun Wu, and Karthik Narasimhan. 2024.
+\newblock $\tau$-bench: A benchmark for tool-agent-user interaction in real-world domains.
+\newblock \emph{arXiv preprint arXiv:2406.12045}.
+
+\bibitem[{Yao et~al.(2022)Yao, Zhao, Yu, Du, Shafran, Narasimhan, and Cao}]{yao2022react}
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, and Yuan Cao. 2022.
+\newblock React: Synergizing reasoning and acting in language models.
+\newblock \emph{arXiv preprint arXiv:2210.03629}.
+
+\bibitem[{Zhang et~al.(2024)Zhang, Chen, Hu, Xu, Chen, Hao, Han, Thai, Wang, Liu, and Sun}]{zhang2024bench}
+Xinrong Zhang, Yingfa Chen, Shengding Hu, Zihang Xu, Junhao Chen, Moo Hao, Xu~Han, Zhen Thai, Shuo Wang, Zhiyuan Liu, and Maosong Sun. 2024.
+\newblock \href {https://doi.org/10.18653/v1/2024.acl-long.814} {$\infty${B}ench: Extending long context evaluation beyond 100{K} tokens}.
+\newblock In \emph{Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)}, pages 15262--15277, Bangkok, Thailand. Association for Computational Linguistics.
+
+\bibitem[{Zhong et~al.(2023)Zhong, Guo, Gao, Wang, and Lin}]{zhong2023memorybank}
+Wanjun Zhong, Lianghong Guo, Qiqi Gao, He~Ye Wang, and Yankai Lin. 2023.
+\newblock {MemoryBank}: Enhancing large language models with long-term memory.
+\newblock \emph{arXiv preprint arXiv:2305.10250}.
+
+\bibitem[{Zhong et~al.(2024)Zhong, Guo, Gao, Ye, and Wang}]{zhong2024memorybank}
+Wanjun Zhong, Lianghong Guo, Qiqi Gao, He~Ye, and Yanlin Wang. 2024.
+\newblock Memorybank: Enhancing large language models with long-term memory.
+\newblock In \emph{Proceedings of the AAAI conference on artificial intelligence}, volume~38, pages 19724--19731.
+
+\end{thebibliography}

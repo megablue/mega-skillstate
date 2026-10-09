@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "min": 4,
+  "keepRecentTurns": 4,
+  "collapseOlder": true,
+  "protectFirstUserMessage": true,
+  "allowSubagentSessions": false,
+  "seedFromTools": true,
+  "trackTools": ["read", "edit", "write", "patch", "glob", "shell"],
+  "nudgeWhenStale": true,
+  "staleAfter": 8,
+  "manualCommand": true,
+  "debug": false
+}

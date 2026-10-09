@@ -9,9 +9,11 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-10` — `master` is `983b877` ← `b15fc35` ← `c15c38e` (v0.2) ← `ab08b26` (v0.1).
-`2026-10-09` was v0.1. `b15fc35` untracked the paper; `983b877` flattened the package.
-Both are structural: no behaviour was meant to change, and the pinning numbers confirm it.
+As of `2026-10-10`, **end of session** — `master` is `a7b2acf` ← `983b877` ← `b15fc35` ←
+`c15c38e` (v0.2) ← `ab08b26` (v0.1). `2026-10-09` was v0.1. `b15fc35` untracked the paper;
+`983b877` flattened the package; `a7b2acf` added install/uninstall. The first two are
+structural: no behaviour was meant to change, and the pinning numbers confirm it.
+The working tree is **clean at the tip** — `a7b2acf` is the last thing delivered.
 
 ## State
 
@@ -31,6 +33,26 @@ Both are structural: no behaviour was meant to change, and the pinning numbers c
   `(Get-Item $link).Delete()`; never `Remove-Item -Recurse`, which can recurse through the
   link and delete the target's contents. The user-scope directory
   (`~/.config/opencode/plugins/opencode-skill-state`) never existed.
+- **Install and uninstall now exist** — `scripts/install.ts` (252 new lines) plus four
+  `plugin:*` npm scripts, ported from the reference plugin's contract rather than invented:
+  one script, three modes, scope chosen by flag. Default = **user scope**
+  (`~/.config/opencode/plugins`), `--project` = **project scope** (`.opencode\plugin`, where
+  the live install already is), `--remove` = uninstall, `--status` prints both scopes. The
+  whole design turns on one Windows hazard: `rmSync` must be called **without `recursive`**
+  on a link, so a delete can never recurse through the junction and destroy the repo.
+  Idempotent (`already current` / `replaced`) and `readlinkSync`-aware, so a **stale**
+  junction is replaced rather than left dead.
+  `files[]` was also wrong: it omitted `scripts/`, so an installed copy could not run its own
+  installer. Now `server.ts, src, scripts, options.json, README.md`.
+- **The installer was verified by running it, not by reading it.** `plugin:status` prints
+  `project <repo>\.opencode\plugin -> <repo root>` and `user … (not installed)`.
+  `plugin:install:project` run **twice** is idempotent — the second run prints `already
+  installed in project scope` and touches nothing. The junction resolves `server.ts` through
+  it (`Test-Path` → True). Node **v22.23.2** executes `.ts` natively (a type-stripping probe
+  printed `ts-ok`), so no build step is involved. One correction recorded on purpose: an
+  earlier claim that `--status` mislabels the project line is **false** — the line reads
+  `project <path> -> <target>`, and the `.opencode\plugin` path segment was mistaken for a
+  label.
 - **v0.2 adds the two `lib-1` seams** from `HOST-API-NOTES.md` "Integrate next":
   - **durable Σ** — `ctx.storage`, key `state/<sessionID>`, in-memory LRU (`MAX_SESSIONS = 64`)
     as a write-through cache. Reads async (a miss is one `storage.get`), the `⊕` merge stays
@@ -63,16 +85,26 @@ Both are structural: no behaviour was meant to change, and the pinning numbers c
 
 - **(done) Commit v0.2** — it is on `master` (`c15c38e`), committed through the `commit-msg`
   hook with no AI attribution, as `AGENTS.md` requires.
+- **(done) Installer** — `a7b2acf` on `master`. The install-uninstall work this session was
+  about is delivered, verified by running it, and the smoke test pins the junction-safe
+  removal. The `opencode plugin list` stale row below is *not* a reason to touch it.
 - **Live end-to-end run** inside a real OpenCode session — the smoke test drives a fake
   *host*, not this one. The load path itself is already proven live: the junction resolves
   `<repo>/server` and this session's `/skillstate` command works, which is the discovery and
-  registration half. What is still unproven is a real collapse firing against the live
-  harness's **actual** payload (the token count there is the one the smoke only models).
-  Just keep talking; `/skillstate` prints the per-turn index showing what collapsed.
+  registration half. What is still unproven is a real **compaction** firing against the live
+  harness's actual payload, and the token count the smoke only models there. The **collapse**
+  seam has now fired live: `/skillstate` printed the per-turn index and forced a collapse
+  mid-session, and the plugin-injected Σ state message was rendered in the live request. Keep
+  talking; `/skillstate` prints the index showing what collapsed.
 - **(answered) Install target** — project scope won. The live install is
   `.opencode/plugin/opencode-skill-state`, a **junction to the repo root**, not a copy;
   the user-scope directory `~/.config/opencode/plugins/opencode-skill-state` never
   existed. See the junction trap in **State** above before moving this repo.
+- The installer has **no uninstall for the user scope** in practice — running
+  `plugin:uninstall` targets `~/.config/opencode/plugins`, where nothing was ever installed,
+  so the project-scope junction is the thing to remove and it needs
+  `plugin:install --project --remove` or the junction's `(Get-Item $link).Delete()`.
+  A `--remove --project` invocation was not exercised; that is the one untested branch.
 - Not implemented from `HOST-API-NOTES.md`: `ctx.event.subscribe` idle flush,
   `ctx.session.synthetic` durable turn, `Message.system()` injection role.
 - Optional: a token/percentage-gated collapse trigger alongside the turn-count gate
@@ -80,7 +112,13 @@ Both are structural: no behaviour was meant to change, and the pinning numbers c
 
 ## Known gaps (volatile; the durable traps live in the feature pages)
 
-- No live OpenCode run — only the isolated smoke test has executed both seams.
+- **The collapse seam has now fired live; only compaction is unproven end-to-end.**
+  `/skillstate` was run in this live session and printed the per-turn index and forced a
+  collapse, which proves the `context` hook, Σ injection and safe collapse all run against
+  the real host — not the smoke test's fake host. The compaction hook
+  (`ctx.session.hook("compaction")`) has been exercised only by the smoke test. What
+  remains unproven live is a host-initiated compaction reaching `src/compaction.ts`, and
+  the real token figures (the smoke numbers are a model, not a measurement of this host).
 - Native (provider-side) compaction bypasses the compaction hook's message edits; the
   plugin's `event.result` still applies because `event.messages` is never edited.
 - A record captures the storage handle at creation, so one process has one store.

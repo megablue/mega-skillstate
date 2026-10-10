@@ -9,8 +9,9 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-10`, **end of session** — `master` is **clean at this tip**: the
-`state_patch` string fix (this commit) ← `093abb2` (installer copies) ← `5fa1ea4`
+As of `2026-10-10`, **end of session** — `master` is **clean at this tip**: this
+refresh ← `d0665d6` (the `state_patch` string fix) ← `093abb2` (installer copies)
+← `5fa1ea4`
 (Σ log keys as maps + shape-naming hints) ← `528ff7d` (user config bootstrap) ←
 `525277a` ← `27f45d4` ← `a7b2acf` (install/uninstall) ← `983b877` (package
 flattened) ← `b15fc35` (paper untracked) ← `c15c38e` (v0.2) ← `ab08b26` (v0.1).
@@ -19,7 +20,7 @@ name itself, because amending the fill-in would rewrite it again.
 
 ## State
 
-- **The `state_patch` fix (this commit) — the fix a live session needed.** The
+- **The `state_patch` fix (`d0665d6`) — the fix a live session needed.** The
   host validates `skill_state`'s arguments against `TOOL_INPUT` **before**
   `execute` runs, so a patch that arrived as a JSON string was refused with
   `Invalid arguments for tool "skill_state": - state_patch: Expected object` and
@@ -39,14 +40,24 @@ name itself, because amending the fill-in would rewrite it again.
   decoded both forms, refusing arrays and numbers with `Expected object |
   string`. The smoke pins the rest — rows `state_patch as string`,
   `state_patch fenced`, `state_patch refusals`.
-- **Install state, true as of this refresh.** Project scope
-  `.opencode/plugin/opencode-g-skill-state` was *still a junction to the repo
-  root* despite `093abb2`; `plugin:install:project` this session **replaced it
-  with a copy** (18 files, in sync). User scope (`~/.config/opencode/plugins`)
-  is **not installed**. Until this session, the earlier "install verified, in
-  sync" claim was not true on disk — `plugin:status` is the reader. Copy
-  semantics and junction-safe removal: `docs/features/skill-state-controls.md`
-  → Install & uninstall.
+- **The restart check is closed — verified live.** The user installed both
+  scopes and restarted; the first stringified `state_patch` through the real
+  call path landed as `skill-state updated → step 74 (changed: findings, step)`
+  with the ack's `note: state_patch arrived as a JSON string; the runtime parsed
+  it. Pass the object itself next time.` The union schema registered at host
+  load — the description-only fallback was not needed — and the refusal class
+  that looped the previous session is gone.
+- **Install state, true as of this refresh — both scopes, each a copy.**
+  `plugin:status` this session: project
+  `.opencode/plugin/opencode-g-skill-state` and user
+  `~/.config/opencode/plugins/opencode-g-skill-state`, both "a copy of the
+  shipped set, 18 file(s), in sync with the repository". The project scope's
+  junction became a copy in the previous session; the user scope was installed
+  right after this session's fix, so every project runs the fix. `opencode
+  plugin list` shows a row per scope for this repo — expected, the context pass
+  is idempotent by design; if anything ever doubles visibly, uninstall one
+  scope. Copy semantics and junction-safe removal:
+  `docs/features/skill-state-controls.md` → Install & uninstall.
 - **Everything older stands as verified:** the v0.2 seams (durable Σ,
   compaction) with the gate numbers unchanged (61 → 14 messages, 15406 → 3642
   tokens), the live restart proving the durable store, and the
@@ -55,15 +66,6 @@ name itself, because amending the fill-in would rewrite it again.
 
 ## Open threads
 
-- **Restart, then verify the fix live — the one open check.** A restart is
-  needed anyway (the project copy now carries the fix). After it: (1) the tool
-  should register — if the host refuses the union schema at *load* (it should
-  not; effect accepts type arrays), the fallback is dropping `type` from
-  `state_patch` (description-only), which keeps the `execute` parsing either
-  way; (2) call `skill_state` once with a stringified `state_patch` and expect
-  a state ack with the parse note, not a host refusal. Until that run, the
-  union is corroborated by the probe and the decoded host conversion, not
-  observed live.
 - Compaction end-to-end is still unproven live (the smoke drives a fake host).
 - **Map sizing (deferred).** `docs/features/configuration.md` → `## How & why`
   (2.4 KB) and `docs/features/skill-state-controls.md` → `## How & why`
@@ -95,7 +97,7 @@ name itself, because amending the fill-in would rewrite it again.
 - `~/.config/opencode/g-skill-state.json` exists (362 bytes, the defaults,
   verified deep-equal; only `trackTools` formatting differs from
   `options.json`). Keep it — a delete just gets it rewritten on the next load.
-- User-scope install: none. Project-scope install: a copy, in sync (see State).
+- Both scopes are installed as copies, in sync (see State).
 - `temp/` is ignored (this session): it holds `probe-json-schema.mjs` and the
   user's `invalid_tool_calls.txt` evidence dump (the five `Expected object`
   refusals plus the successful call behind the diagnosis). Working artifacts;

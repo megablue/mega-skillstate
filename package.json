@@ -18,6 +18,11 @@
     "README.md"
   ],
   "license": "MIT",
+  "author": "Evert Chin (https://github.com/megablue)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/megablue/opencode-g-skill-state.git"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs .",

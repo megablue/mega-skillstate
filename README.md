@@ -3,6 +3,15 @@
 An OpenCode 2.0 plugin that bounds a session's context window with an **explicit,
 structured execution state (Σ)** instead of an append-only conversation history.
 
+<div align="center">
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/megablue/opencode-g-skill-state?style=flat-square)](package.json)
+[![Topic: opencode-plugin](https://img.shields.io/badge/topic-opencode--plugin-0e7490.svg?style=flat-square)](https://github.com/topics/opencode-plugin)
+[![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg?style=flat-square)](package.json)
+
+</div>
+
 ## What it does
 
 The paper's agent sees `(P, Σ_t, O_t)`: the fixed procedure, a structured state, and the
@@ -150,3 +159,9 @@ history with an explicit, mutable execution state — comes from **"SKILL.state:
 Scalable Long-Horizon Agent Skills"** by Sanket Badhe, Priyanka Tiwari and
 Jonghyun Chung (arXiv:2608.26263v2, accepted at EMNLP). This plugin is a port
 of that idea to the OpenCode host.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
+
+Copyright (c) Evert Chin

@@ -138,7 +138,8 @@ npm run smoke         # the pinning test: Σ injection, safe collapse, idempoten
 
 ## Provenance
 
-The host API shapes this plugin relies on were measured against OpenCode
-`@opencode/plugin@2.0.26` on this machine, cross-checked against the working reference
-plugin `opencode-feature-map-as-context` — including its safe-cut helpers, which are
-ported rather than reinvented.
+The approach this plugin implements — replacing an append-only conversation
+history with an explicit, mutable execution state — comes from **"SKILL.state:
+Scalable Long-Horizon Agent Skills"** by Sanket Badhe, Priyanka Tiwari and
+Jonghyun Chung (arXiv:2608.26263v2, accepted at EMNLP). This plugin is a port
+of that idea to the OpenCode host.

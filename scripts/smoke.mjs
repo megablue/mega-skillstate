@@ -426,6 +426,62 @@ assert.ok(host.storage.calls.sets.includes("state/ses_smoke"), "the write went t
 assert.deepEqual(persisted.collapsed, { from: 2, to: 17 }, "the committed span is durable too")
 row("durable write", "state/ses_smoke persisted " + Object.keys(persisted.state).join(", "))
 
+// The patch's tolerant read: the input schema admits an object or a JSON string, because
+// the host validates the call before `execute` runs — a quoted patch refused there is
+// never seen again, while a string let through can still be decoded. A bare string and a
+// fenced one both write; a string that is not a JSON object refuses with Σ untouched.
+// A session of its own, so the counts the command section asserts on stay put.
+assert.deepEqual(tool.input.properties.state_patch.type, ["object", "string"], "the host's gate admits both forms")
+
+const stringsCtx = (messageID, id) => ({
+  sessionID: "ses_smoke_strings",
+  agent: "build",
+  messageID,
+  id,
+  signal: new AbortController().signal,
+})
+const stringPatch = await tool.execute(
+  {
+    state_patch: JSON.stringify({
+      objective: "written through a string patch",
+      decisions: { "string form": "parsed by the runtime" },
+      not_a_key: 5,
+    }),
+  },
+  stringsCtx("msg_2", "call_state_string"),
+)
+const stringAck = typeof stringPatch.content === "string" ? stringPatch.content : stringPatch.content.map((part) => part.text).join("\n")
+assert.equal(stringPatch.output.kind, "state", stringAck)
+assert.ok(stringAck.includes("arrived as a JSON string"), stringAck)
+assert.deepEqual(stringPatch.output.dropped, ["not_a_key"], "unknown keys inside a string patch are dropped like any other")
+const afterString = host.storage.map.get("state/ses_smoke_strings")
+assert.equal(afterString.state.objective, "written through a string patch")
+assert.equal(afterString.state.decisions["string form"], "parsed by the runtime", "a string patch merges like an object")
+row("state_patch as string", stringAck.replace(/\n/g, " · "))
+
+const fenced = await tool.execute(
+  { state_patch: "```json\n" + JSON.stringify({ objective: "fenced, then decoded" }) + "\n```" },
+  stringsCtx("msg_3", "call_state_fenced"),
+)
+assert.equal(fenced.output.kind, "state")
+assert.equal(fenced.output.step, stringPatch.output.step + 1, "the counter moves like any other write")
+assert.equal(host.storage.map.get("state/ses_smoke_strings").state.objective, "fenced, then decoded", "a fenced string is decoded behind the fence")
+row("state_patch fenced", "```json block decoded")
+
+const broken = await tool.execute({ state_patch: "{not json" }, stringsCtx("msg_4", "call_state_broken"))
+const brokenAck = typeof broken.content === "string" ? broken.content : broken.content.map((part) => part.text).join("\n")
+assert.equal(broken.output.kind, "error", brokenAck)
+assert.ok(brokenAck.includes("not valid JSON"), brokenAck)
+
+const notObject = await tool.execute({ state_patch: "[1, 2]" }, stringsCtx("msg_5", "call_state_not_object"))
+const notObjectAck = typeof notObject.content === "string" ? notObject.content : notObject.content.map((part) => part.text).join("\n")
+assert.equal(notObject.output.kind, "error", notObjectAck)
+assert.ok(notObjectAck.includes("decoded to an array"), notObjectAck)
+const afterRefusals = host.storage.map.get("state/ses_smoke_strings")
+assert.equal(afterRefusals.state.objective, "fenced, then decoded", "a refusal writes nothing")
+assert.equal(afterRefusals.state.step, fenced.output.step, "and does not move the step")
+row("state_patch refusals", "broken string and non-object string leave Σ alone")
+
 // ---------------------------------------------------------------------------
 // The guards: the collapse is conservative by default, and a subagent keeps its own.
 // ---------------------------------------------------------------------------

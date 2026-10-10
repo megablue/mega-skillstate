@@ -85,6 +85,8 @@ the plugin still runs. Read the package `README.md` for install scope.
 | `debug` | `false` | bool — log pass decisions to stderr |
 
 Controls the model/user touch: the `skill_state` tool (the model writes a
-`state_patch`, sets a key to `null` to delete it; keys the schema does not own are
-dropped) and the `/skillstate` command (print the current Σ, the measured context,
-and what is collapsed vs kept; `/skillstate now` collapses immediately).
+`state_patch` — an object, or a JSON string the runtime parses — sets a key to `null` to
+delete it; keys the schema does not own are dropped; a patch that is not an object comes
+back as an error and leaves Σ untouched) and the `/skillstate` command (print the current
+Σ, the measured context, and what is collapsed vs kept; `/skillstate now` collapses
+immediately).

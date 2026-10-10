@@ -93,7 +93,8 @@ export function toolDescription(): string {
     "",
     "Pass `state_patch` as a JSON object of the keys you are setting, merged over the",
     "current state: dictionaries merge key by key, arrays replace wholesale, and a `null`",
-    "value deletes the key. Pass `step` (integer) to set the step index, and `summary`",
+    "value deletes the key. A JSON string that encodes the object is parsed as a fallback,",
+    "but send the object itself. Pass `step` (integer) to set the step index, and `summary`",
     "for a one-line note about what changed. Keys outside the schema are dropped.",
     "",
     "Schema:",
@@ -128,11 +129,20 @@ export function turnSpan(from: number, to: number): string {
 }
 
 /** The ack `skill_state` hands back. Compact, because it is read once and forgotten. */
-export function ackText(input: { step: number; changed: ReadonlyArray<string>; dropped: ReadonlyArray<string> }): string {
+export function ackText(input: {
+  step: number
+  changed: ReadonlyArray<string>
+  dropped: ReadonlyArray<string>
+  /** True when the patch arrived as a JSON string and the runtime decoded it. */
+  fromString?: boolean
+}): string {
   const changed = input.changed.length === 0 ? "none" : input.changed.join(", ")
   let text = "skill-state updated → step " + input.step + " (changed: " + changed + ")"
   if (input.dropped.length > 0) {
     text += "\ndropped (not in the schema): " + input.dropped.join(", ")
+  }
+  if (input.fromString === true) {
+    text += "\nnote: state_patch arrived as a JSON string; the runtime parsed it. Pass the object itself next time."
   }
   return text
 }

@@ -29,16 +29,19 @@ export const TOOL_NAME = "skill_state"
  * The parameter contract of `skill_state`, as plain JSON Schema.
  *
  * `state_patch` is the whole channel: a JSON object of the keys being written, where a
- * `null` value is an instruction to delete rather than a value to store.
+ * `null` value is an instruction to delete rather than a value to store. Its `type` is
+ * a union rather than `"object"` alone on purpose — the host validates the call before
+ * `execute` runs, so an object-only schema turns a quoted JSON string away at the door,
+ * with nobody left to parse it. The union lets that call through to `parsePatch`.
  */
 export const TOOL_INPUT = {
   type: "object",
   additionalProperties: false,
   properties: {
     state_patch: {
-      type: "object",
+      type: ["object", "string"],
       description:
-        "The keys to write, merged over the current state. Dictionaries merge key by key, arrays replace wholesale, and a null value deletes the key. Keys outside the schema are dropped.",
+        "The keys to write, merged over the current state. Pass the object itself; a JSON string that encodes one is also accepted and parsed. Dictionaries merge key by key, arrays replace wholesale, and a null value deletes the key. Keys outside the schema are dropped.",
     },
     step: {
       type: "integer",
@@ -66,6 +69,64 @@ export function textResult(text: string, output: Record<string, unknown>): ToolR
 export function sessionIdOf(context: unknown): string | undefined {
   const id = (context as { sessionID?: unknown } | undefined)?.sessionID
   return typeof id === "string" && id.length > 0 ? id : undefined
+}
+
+/**
+ * The patch the merge will apply, from either form the input schema lets through.
+ *
+ * The host validates a call before `execute` runs, so admitting the string form and
+ * decoding it have to happen on opposite sides of that gate: the schema (a union)
+ * admits, this function decodes. It unfences a Markdown code block first, because a
+ * quoted payload tends to arrive fenced, and then requires what the merge requires — a
+ * plain object. Anything else comes back as a soft error that names what arrived and
+ * leaves Σ untouched.
+ *
+ * `fromString` is what the ack reports, so a transcript shows a quoted patch for what
+ * it was: a payload the runtime had to decode, not the form to send next time.
+ */
+function parsePatch(value: unknown): { patch?: Record<string, unknown>; error?: string; fromString: boolean } {
+  if (value === undefined) return { fromString: false }
+  if (isPlainObject(value)) return { patch: value, fromString: false }
+  if (typeof value !== "string") {
+    return {
+      fromString: false,
+      error:
+        "state_patch must be a JSON object of the keys you are setting; set a key to null to delete it. It arrived as " +
+        describe(value) +
+        ".",
+    }
+  }
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(unfence(value).trim())
+  } catch {
+    return {
+      fromString: true,
+      error:
+        "state_patch arrived as a string that is not valid JSON; nothing was written. Pass the object itself, not a quoted or fenced copy.",
+    }
+  }
+  if (!isPlainObject(decoded)) {
+    return {
+      fromString: true,
+      error:
+        "state_patch decoded to " + describe(decoded) + ", not a JSON object of the keys you are setting; nothing was written.",
+    }
+  }
+  return { patch: decoded, fromString: true }
+}
+
+/** The body of a string fenced as a Markdown code block, or the string as it stands. */
+function unfence(text: string): string {
+  const fenced = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/.exec(text)
+  return fenced === null ? text : fenced[1]
+}
+
+/** What arrived, for a refusal: a JSON kind, not a JavaScript type name. */
+function describe(value: unknown): string {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "an array"
+  return "a " + typeof value
 }
 
 /**
@@ -98,12 +159,9 @@ export function createSkillState(options: { readonly storage?: StorageDomain } =
         )
       }
       const raw = args as { state_patch?: unknown; step?: unknown; summary?: unknown } | undefined
-      const patch = raw?.state_patch
-      if (patch !== undefined && !isPlainObject(patch)) {
-        return textResult(
-          "state_patch must be a JSON object of the keys you are setting; set a key to null to delete it.",
-          { kind: "error" },
-        )
+      const parsed = parsePatch(raw?.state_patch)
+      if (parsed.error !== undefined) {
+        return textResult(parsed.error, { kind: "error" })
       }
       const wanted = raw?.step
       if (wanted !== undefined && wanted !== null && !Number.isInteger(wanted)) {
@@ -118,9 +176,9 @@ export function createSkillState(options: { readonly storage?: StorageDomain } =
       // other, so it merges, it can be deleted, and it shows up in what changed. A write
       // with no `step` advances whatever Σ already carries — a seed or an earlier write.
       const step = wanted === undefined || wanted === null ? record.step() + 1 : (wanted as number)
-      const written: Record<string, unknown> = isPlainObject(patch) ? { ...patch } : {}
+      const written: Record<string, unknown> = parsed.patch === undefined ? {} : { ...parsed.patch }
       written["step"] = step
-      const dropped = patch === undefined ? [] : unknownKeys(patch)
+      const dropped = parsed.patch === undefined ? [] : unknownKeys(parsed.patch)
 
       const changed = await record.apply(written)
       if (typeof raw?.summary === "string") await record.setSummary(raw.summary)
@@ -134,7 +192,7 @@ export function createSkillState(options: { readonly storage?: StorageDomain } =
         summary: record.summary(),
         tokens: estimateTokens(render(record.get())),
       }
-      return textResult(ackText({ step, changed, dropped }), output)
+      return textResult(ackText({ step, changed, dropped, fromString: parsed.fromString }), output)
     },
   }
 }

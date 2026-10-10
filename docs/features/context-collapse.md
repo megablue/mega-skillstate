@@ -7,7 +7,7 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 ## What it does
 
 - Rewrites **only the outgoing request** — never the durable transcript — so the model sees `policy + Σ + recent window` instead of the whole history.
-- Injects Σ as one message (`role: user`, id `fmac_state`) placed **after the first user instruction**, so the protected head stays first.
+- Injects Σ as one message (`role: user`, id `mega_state`) placed **after the first user instruction**, so the protected head stays first.
 - Collapses the superseded prefix (turns older than `keepRecentTurns`, once past `min`) into Σ; the collapsed span is **durable** (`state/<sessionID>`) and re-applied on every request.
 - Seeds `files`/`cwd`/`activeFiles`/`step` from the surviving window, then **renders Σ once** (see the ordering trap).
 - Appends a stale-nudge only at a **balanced tail** (`inFlight === 0`).
@@ -15,14 +15,14 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 ## Map
 
 - `src/context.ts` — `runContextTransform` (async), `applyTransform` (async), `describeContext` (async), `measureContext`, `roughTokens`, `estimateTokens`, `windowOf`, `messageOf`, `SessionContextEventLike`, `ToolWireEntry` (the name arrives here, so no import cycle with `tool.ts`); types `TransformDeps` (now carries `storage`), the pass report.
-- `src/view.ts` — ported safe-cut helpers: `viewOf`, `turnMap`, `turnsOf`, `balanceCuts`, `selectPrunableRange`, `firstSelectableIndex`; injected-id helpers `INJECTED_ID_PREFIX` (`fmac_`), `isInjectedMessage`, `STATE_MESSAGE_ID`, `valueText`.
+- `src/view.ts` — ported safe-cut helpers: `viewOf`, `turnMap`, `turnsOf`, `balanceCuts`, `selectPrunableRange`, `firstSelectableIndex`; injected-id helpers `INJECTED_ID_PREFIX` (`mega_`), `isInjectedMessage`, `STATE_MESSAGE_ID`, `valueText`.
 - `src/prompts.ts` — `SECTION_TEXT` (standing policy), `nudgeText`, `stateMessageText`.
 - `src/index.ts` — registers the hook inside `try/catch`; wires `windows` (model windows), the bounded `lastRequest` map, and `ctx.storage` into the transform's deps.
 
 ## How & why
 
 - **Strip, then re-apply.** The host hands the raw transcript whole on every request, so
-  the pass deletes every injected `fmac_` message first and re-derives the payload from
+  the pass deletes every injected `mega_` message first and re-derives the payload from
   `(raw transcript, Σ)`. This is what makes it a pure function and idempotent by design.
 - **A cut lands only on a safe boundary.** Collapse uses `selectPrunableRange`, which walks
   back to a boundary `balanceCuts` proves safe; if the payload cannot be balanced the range

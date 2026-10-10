@@ -12,7 +12,7 @@
  * difference between this plugin and an ordinary compactor, and it is the part a model
  * forgets first.
  *
- * @module opencode-g-skill-state/prompts
+ * @module mega-skillstate/prompts
  */
 
 import { render, STATE_FIELDS, type Sigma } from "./schema.ts"
@@ -28,7 +28,7 @@ import { render, STATE_FIELDS, type Sigma } from "./schema.ts"
  */
 export const SECTION_TEXT = [
   "This context window is bounded by an explicit execution state (Σ), not by an",
-  "append-only transcript. A `fmac_state` message early in the conversation carries",
+  "append-only transcript. A `mega_state` message early in the conversation carries",
   "that state as compact JSON: the objective, the plan, what is done, the findings, the",
   "files, the decisions, the approaches already ruled out, and what is open. Read it",
   "first — the turns it replaced are not in this request.",

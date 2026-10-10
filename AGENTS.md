@@ -5,7 +5,7 @@
 about to change. The feature pages name the files, functions and tests you
 would otherwise hunt for — the code comes after them, not before.**
 
-opencode-g-skill-state is a plugin for the OpenCode 2.0 CLI (TypeScript, ESM) that
+mega-skillstate is a plugin for the OpenCode 2.0 CLI (TypeScript, ESM) that
 bounds the context window by replacing an append-only conversation history with an
 explicit, structured skill-execution state (Σ) — the SKILL.state approach, derived
 from the paper in `docs/arXiv-2608.26263v2/`.
@@ -73,7 +73,7 @@ Everything runs from the repo root unless said otherwise.
   semantics): `npm run smoke`  (`node scripts/smoke.mjs .`)
 - Load the plugin in OpenCode: the host resolves `<plugin-root>/server`, so point
   a discovery directory at this package. Project scope:
-  `.opencode/plugin/opencode-g-skill-state`; user scope:
+  `.opencode/plugin/mega-skillstate`; user scope:
   `C:\Users\mega\.config\opencode\plugins\`. No build step — the host loads the
   TypeScript source directly.
 

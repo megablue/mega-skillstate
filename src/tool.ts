@@ -13,7 +13,7 @@
  * acknowledgement to the model and nothing else, so a bookkeeping call never costs the
  * user a turn of its own.
  *
- * @module opencode-g-skill-state/tool
+ * @module mega-skillstate/tool
  */
 
 import { ackText, toolDescription } from "./prompts.ts"

@@ -1,4 +1,4 @@
-# opencode-g-skill-state
+# mega-skillstate
 
 An OpenCode 2.0 plugin that bounds a session's context window with an **explicit,
 structured execution state (Σ)** instead of an append-only conversation history.
@@ -6,7 +6,7 @@ structured execution state (Σ)** instead of an append-only conversation history
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/github/package-json/v/megablue/opencode-g-skill-state?style=flat-square)](package.json)
+[![Version](https://img.shields.io/github/package-json/v/megablue/mega-skillstate?style=flat-square)](package.json)
 [![Topic: opencode-plugin](https://img.shields.io/badge/topic-opencode--plugin-0e7490.svg?style=flat-square)](https://github.com/topics/opencode-plugin)
 [![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg?style=flat-square)](package.json)
 
@@ -88,7 +88,7 @@ one, because a reinstall is an upgrade.
 Nothing to enable: the transform runs on every request of every session once the plugin
 is discovered. What you get:
 
-- a `fmac_state` message near the head of the request, carrying Σ and naming the span it
+- a `mega_state` message near the head of the request, carrying Σ and naming the span it
   replaced;
 - the `skill_state` tool, offered to the model on every request;
 - `/skillstate`, which prints Σ, the measured context, the model's window, how many recent
@@ -100,7 +100,7 @@ To see what the pass decided, check `/skillstate`.
 ## Config
 
 Options are read, most specific last, from `options.json` at this package's root,
-from a user-level `~/.config/opencode/g-skill-state.json` — created on first run
+from a user-level `~/.config/opencode/mega-skillstate.json` — created on first run
 with every default in it, and never overwritten afterwards — and from the plugin
 entry's own `options` in `opencode.json`. A source only replaces the keys it
 sets, so a partial file is fine: a directory install is configured by editing that

@@ -31,10 +31,10 @@
  * The installer is idempotent: a copy that matches the shipped set byte for byte is left
  * alone and reported as `current` — not rewritten. A copy that has drifted is synced on
  * the next install, because a reinstall is an upgrade. What a *user* owns lives outside
- * the install (`~/.config/opencode/g-skill-state.json`), so syncing the shipped set
+ * the install (`~/.config/opencode/mega-skillstate.json`), so syncing the shipped set
  * destroys nothing of theirs.
  *
- * @module opencode-g-skill-state/install
+ * @module mega-skillstate/install
  */
 
 import {
@@ -116,7 +116,7 @@ export function parseArgs(argv: readonly string[]): { project: boolean; remove: 
 function printHelp(): void {
   process.stdout.write(
     [
-      "Install opencode-g-skill-state into an OpenCode plugin discovery directory.",
+      "Install mega-skillstate into an OpenCode plugin discovery directory.",
       "",
       "  (no arguments)   copy into the user scope (~/.config/opencode/plugins/)",
       "  --project        copy into this repository (.opencode/plugin/)",

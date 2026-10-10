@@ -1,6 +1,6 @@
 {
-  "name": "opencode-g-skill-state",
-  "version": "0.2.0",
+  "name": "mega-skillstate",
+  "version": "0.3.0",
   "private": true,
   "description": "OpenCode 2.0 plugin: bound the context window with an explicit, structured skill-execution state (SKILL.state) instead of append-only history",
   "type": "module",
@@ -21,7 +21,7 @@
   "author": "Evert Chin (https://github.com/megablue)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/megablue/opencode-g-skill-state.git"
+    "url": "git+https://github.com/megablue/mega-skillstate.git"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

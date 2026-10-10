@@ -6,7 +6,7 @@
  * and an unrecognised key is an error rather than a silently ignored typo: a context
  * policy that quietly keeps a default is worse than one that refuses to load.
  *
- * @module opencode-g-skill-state/config
+ * @module mega-skillstate/config
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -14,13 +14,13 @@ import { basename, dirname, join } from "node:path"
 import { homedir } from "node:os"
 
 /** Package name; it is the plugin's id, and the label every message of its own is attributed to. */
-export const PLUGIN = "opencode-g-skill-state"
+export const PLUGIN = "mega-skillstate"
 
 /** The user-level config file's name, inside the host's own user configuration directory. */
-export const USER_CONFIG_FILENAME = "g-skill-state.json"
+export const USER_CONFIG_FILENAME = "mega-skillstate.json"
 
 /** The environment variable that points the user-level config file somewhere else. */
-export const USER_CONFIG_ENV = "OPENCODE_G_SKILL_STATE_CONFIG"
+export const USER_CONFIG_ENV = "MEGA_SKILLSTATE_CONFIG"
 
 /**
  * Everything the plugin reads, with the value used when the plugin entry says nothing.

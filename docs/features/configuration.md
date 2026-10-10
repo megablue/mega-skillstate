@@ -1,7 +1,7 @@
 # Configuration — sources, the ladder, and the bootstrap
 
 Status: shipped (v0.2) · Read when: a setting does not take effect; where a config
-value comes from; the user-level `g-skill-state.json`; which file wins; the plugin
+value comes from; the user-level `mega-skillstate.json`; which file wins; the plugin
 writing a config file on first run; an unknown key refusing to load; the smoke test
 touching the real home.
 
@@ -9,7 +9,7 @@ touching the real home.
 
 - Three sources, layered most specific last: the built-in `DEFAULT_CONFIG`, the
   `options.json` an installed copy carries, the user-level
-  `~/.config/opencode/g-skill-state.json`, and the host's own plugin entry in
+  `~/.config/opencode/mega-skillstate.json`, and the host's own plugin entry in
   `opencode.json`. A source replaces only the keys it sets, so a partial file is a
   valid file.
 - A **first run writes every default** to the user-level file, pretty-printed. An
@@ -29,7 +29,7 @@ touching the real home.
   `resolveConfig(resolveOptions(ctx.options, OPTIONS_PATH, userFile))` — the only
   call site.
 - `scripts/smoke.mjs` — the `user config` / `config layers` rows: the redirected
-  `OPENCODE_G_SKILL_STATE_CONFIG` scratch file, the defaults written, the
+  `MEGA_SKILLSTATE_CONFIG` scratch file, the defaults written, the
   never-rewrite proof, the ladder order, the malformed-file refusal.
 
 ## How & why
@@ -46,7 +46,7 @@ touching the real home.
   rest fall through to the layer below. The shipped `options.json` lists all 12
   keys, so the merge changes no behaviour today — it becomes true layering the
   moment someone trims that file or ships a partial one.
-- **The drift trap.** `.opencode/plugin/opencode-g-skill-state` is a *copy* of the shipped
+- **The drift trap.** `.opencode/plugin/mega-skillstate` is a *copy* of the shipped
   set, so editing the repository's `options.json` no longer changes the live plugin for any
   project — the install keeps its own copy until a reinstall syncs it. That is the trap
   under copy semantics: an edit in the repository reaches nothing until
@@ -57,7 +57,7 @@ touching the real home.
 - **Why a failed write warns and never throws.** The file is a convenience — the
   layers fall through to the defaults without it. A *missing* file is not an
   error; a *malformed* one is, like every other configuration mistake.
-- **The env seam.** `OPENCODE_G_SKILL_STATE_CONFIG` overrides the path — for the
+- **The env seam.** `MEGA_SKILLSTATE_CONFIG` overrides the path — for the
   smoke test, which must never write to a real home, and for a user who wants the
   file somewhere else. It is read when `setup` runs, not at import, so a test can
   redirect per call.
@@ -71,7 +71,7 @@ touching the real home.
 
 The 12 keys and their defaults are documented per feature — see **Related** below
 for the page that owns each. This page owns only where a value comes from:
-`DEFAULT_CONFIG` < `options.json` < `~/.config/opencode/g-skill-state.json` < the
+`DEFAULT_CONFIG` < `options.json` < `~/.config/opencode/mega-skillstate.json` < the
 host's plugin entry.
 
 ## Tests that pin it

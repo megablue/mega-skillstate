@@ -1,4 +1,4 @@
-# Session handoff — opencode-g-skill-state
+# Session handoff — mega-skillstate
 
 Next: `docs/features/README.md` — the feature map. Read only the page for
 your area before the code.
@@ -9,63 +9,83 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-10`, **end of session** — `master` is **clean at this tip**: this
-refresh ← `d0665d6` (the `state_patch` string fix) ← `093abb2` (installer copies)
-← `5fa1ea4`
-(Σ log keys as maps + shape-naming hints) ← `528ff7d` (user config bootstrap) ←
+As of `2026-10-10`, **end of session** — the tip is the rename commit
+(`Rename the project to mega-skillstate`) on top of `d0665d6` (the
+`state_patch` string fix) ← `093abb2` (installer copies) ← `5fa1ea4` (Σ log
+keys as maps + shape-naming hints) ← `528ff7d` (user config bootstrap) ←
 `525277a` ← `27f45d4` ← `a7b2acf` (install/uninstall) ← `983b877` (package
-flattened) ← `b15fc35` (paper untracked) ← `c15c38e` (v0.2) ← `ab08b26` (v0.1).
-`2026-10-09` was v0.1. `git rev-parse HEAD` for the sha — this file does not
-name itself, because amending the fill-in would rewrite it again.
+flattened) ← `b15fc35` (paper untracked) ← `c15c38e` (v0.2). `git rev-parse
+HEAD` for the sha — this file does not name itself, because amending the
+fill-in would rewrite it again.
 
 ## State
 
-- **The `state_patch` fix (`d0665d6`) — the fix a live session needed.** The
-  host validates `skill_state`'s arguments against `TOOL_INPUT` **before**
-  `execute` runs, so a patch that arrived as a JSON string was refused with
-  `Invalid arguments for tool "skill_state": - state_patch: Expected object` and
-  the plugin never saw it; the guard inside `execute` was unreachable. A
-  previous session looped on that refusal for about an hour (31 stringified
-  calls in one stretch), because the message read like a size problem and the
-  model retried smaller patches. Now `state_patch` is `["object","string"]`,
-  `parsePatch` unfences and decodes a string, requires a plain object, refuses
-  anything else softly, and the ack appends a note when a string had to be
-  parsed. Map, mechanism and trap: `docs/features/skill-state-controls.md`;
-  contract: `DESIGN.md` → `skill_state` tool; user-visible line:
-  `docs/SPEC.md` → Controls.
-- **Why the union is safe (measured, not assumed).** The host converts the raw
-  JSON Schema through effect's importer (decoded from `opencode.exe`), and this
-  repo's dev dependency carries the same effect line (`4.0.0-rc.112`).
-  `temp/probe-json-schema.mjs` (ignored) imported the exact `TOOL_INPUT` and
-  decoded both forms, refusing arrays and numbers with `Expected object |
-  string`. The smoke pins the rest — rows `state_patch as string`,
-  `state_patch fenced`, `state_patch refusals`.
-- **The restart check is closed — verified live.** The user installed both
-  scopes and restarted; the first stringified `state_patch` through the real
-  call path landed as `skill-state updated → step 74 (changed: findings, step)`
-  with the ack's `note: state_patch arrived as a JSON string; the runtime parsed
-  it. Pass the object itself next time.` The union schema registered at host
-  load — the description-only fallback was not needed — and the refusal class
-  that looped the previous session is gone.
-- **Install state, true as of this refresh — both scopes, each a copy.**
-  `plugin:status` this session: project
-  `.opencode/plugin/opencode-g-skill-state` and user
-  `~/.config/opencode/plugins/opencode-g-skill-state`, both "a copy of the
-  shipped set, 18 file(s), in sync with the repository". The project scope's
-  junction became a copy in the previous session; the user scope was installed
-  right after this session's fix, so every project runs the fix. `opencode
-  plugin list` shows a row per scope for this repo — expected, the context pass
-  is idempotent by design; if anything ever doubles visibly, uninstall one
-  scope. Copy semantics and junction-safe removal:
-  `docs/features/skill-state-controls.md` → Install & uninstall.
+- **The rename — every surface in this repo now says `mega-skillstate`.**
+  Package name, plugin id (`PLUGIN`, so the message label too), repository
+  URL, README title and Version badge, `@module` tags, docs and smoke pins;
+  version `0.3.0`. The user-level config surface moved with it:
+  `~/.config/opencode/mega-skillstate.json` and `MEGA_SKILLSTATE_CONFIG`
+  (clean break, no fallback aliases). The pre-rename file was renamed in
+  place, so its edits survive — it carries one entry beyond the defaults,
+  `feature_map` in `trackTools`.
+- **Injected ids are now `mega_`-prefixed** (`mega_state`,
+  `mega_notice_stale`; `src/view.ts` `INJECTED_ID_PREFIX`). The reference
+  plugin keeps its own `fmac_` prefix, and `HOST-API-NOTES.md` still names
+  that — the only remaining `fmac` mentions in the repo.
+- **Install scopes — reinstalled under the new name this session.** The
+  old-named copies were removed from both scopes first (so no restart can
+  discover both ids), then: project `.opencode/plugin/mega-skillstate`,
+  user `~/.config/opencode/plugins/mega-skillstate`, both "a copy of the
+  shipped set, 18 file(s), in sync with the repository". `opencode plugin
+  list` shows a row per scope for this repo — expected, the context pass is
+  idempotent by design; if anything ever doubles visibly, uninstall one
+  scope.
+- **The folder rename is pending — the one live step.** The repo directory
+  is still `opencode-g-skill-state`. `Rename-Item` was refused with "being
+  used by another process": the running host holds the directory as its
+  cwd, and Windows will not rename it underneath. Rename it with OpenCode
+  not running in it (close OpenCode, or start from another directory):
+  `Rename-Item C:\Users\mega\projects\opencode-g-skill-state mega-skillstate`,
+  then reopen OpenCode in `C:\Users\mega\projects\mega-skillstate`. The
+  repo, `.git` and the project-scope copy all move together; nothing else
+  needs redoing. This session (still keyed to the old path) can be moved
+  with `session_move` from a new session afterwards.
+- **Restart pending — the rename's live check.** After the restart watch
+  for: the plugin loading as `mega-skillstate`, the injected message id
+  `mega_state`, the config bootstrap at `mega-skillstate.json`, and
+  `/skillstate` still working.
+- **The `state_patch` fix (`d0665d6`) — the fix a live session needed.**
+  The host validates `skill_state`'s arguments against `TOOL_INPUT`
+  **before** `execute` runs, so a patch that arrived as a JSON string was
+  refused with `Invalid arguments for tool "skill_state": - state_patch:
+  Expected object` and the plugin never saw it; the guard inside `execute`
+  was unreachable. A previous session looped on that refusal for about an
+  hour (31 stringified calls in one stretch), because the message read like
+  a size problem and the model retried smaller patches. Now `state_patch`
+  is `["object","string"]`, the string is unfenced and decoded, must be a
+  plain object, anything else is refused softly, and the ack appends a note
+  when a string had to be parsed. Map, mechanism and trap:
+  `docs/features/skill-state-controls.md`; contract: `DESIGN.md` →
+  `skill_state` tool; user-visible line: `docs/SPEC.md` → Controls.
+- **Why the union is safe (measured, not assumed).** The host converts the
+  raw JSON Schema through effect's importer (decoded from `opencode.exe`),
+  and this repo's dev dependency carries the same effect line
+  (`4.0.0-rc.112`). `temp/probe-json-schema.mjs` (ignored) imported the
+  exact `TOOL_INPUT` and decoded both forms, refusing arrays and numbers
+  with `Expected object | string`. The smoke pins the rest — rows
+  `state_patch as string`, `state_patch fenced`, `state_patch refusals`.
+  The rest of this bullet's earlier live check stands: the union schema
+  registered at host load, and a real stringified call came back parsed.
 - **Everything older stands as verified:** the v0.2 seams (durable Σ,
-  compaction) with the gate numbers unchanged (61 → 14 messages, 15406 → 3642
-  tokens), the live restart proving the durable store, and the
-  log-keys-as-maps change (`skill-state.md` → the schema hints). This session's
-  fix is behaviour-additive; every older smoke pin still passes unchanged.
+  compaction) with the gate numbers unchanged (61 → 14 messages, 15406 →
+  3642 tokens), the live restart proving the durable store, and the
+  log-keys-as-maps change (`skill-state.md` → the schema hints).
 
 ## Open threads
 
+- **Folder rename** (see State) — needs OpenCode off the directory.
+- **Post-restart rename check** — `mega_state` ids, `/skillstate`, and no
+  `g-skill-state.json` reappearing in `~/.config/opencode/`.
 - Compaction end-to-end is still unproven live (the smoke drives a fake host).
 - **Map sizing (deferred).** `docs/features/configuration.md` → `## How & why`
   (2.4 KB) and `docs/features/skill-state-controls.md` → `## How & why`
@@ -94,11 +114,16 @@ name itself, because amending the fill-in would rewrite it again.
 - No remote configured. The reference plugin
   (`~/.config/opencode/plugins/opencode-feature-map-as-context`) is outside this
   repo and was not modified.
-- `~/.config/opencode/g-skill-state.json` exists (362 bytes, the defaults,
-  verified deep-equal; only `trackTools` formatting differs from
-  `options.json`). Keep it — a delete just gets it rewritten on the next load.
-- Both scopes are installed as copies, in sync (see State).
-- `temp/` is ignored (this session): it holds `probe-json-schema.mjs` and the
-  user's `invalid_tool_calls.txt` evidence dump (the five `Expected object`
-  refusals plus the successful call behind the diagnosis). Working artifacts;
-  do not track them.
+- `~/.config/opencode/mega-skillstate.json` — renamed from
+  `g-skill-state.json` this session; keep it (one custom entry:
+  `feature_map` in `trackTools`; a delete just gets it rewritten on the next
+  load).
+- Both scopes are installed as `mega-skillstate` copies, in sync (see State);
+  the old-named install directories are gone.
+- The repo folder rename is pending (see State) — until then the working
+  directory is still `C:\Users\mega\projects\opencode-g-skill-state`.
+- `temp/` is ignored: it holds `probe-json-schema.mjs` and the user's
+  `invalid_tool_calls.txt` evidence dump (the five `Expected object` refusals
+  plus the successful call behind the diagnosis). Working artifacts; do not
+  track them. This session's rename sweep script lives outside the repo, in
+  `%LOCALAPPDATA%\Temp\opencode\`.

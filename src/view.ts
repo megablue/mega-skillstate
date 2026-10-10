@@ -22,7 +22,7 @@
  * 3. The host's payload names no turn. This plugin numbers them itself, once per
  *    session, from the user messages it sees — see {@link turnMap}.
  *
- * @module opencode-g-skill-state/view
+ * @module mega-skillstate/view
  */
 
 import type { ContentPart, Message, ToolCallPart, ToolResultPart } from "./types.ts"
@@ -67,7 +67,7 @@ export interface TurnMemory {
 }
 
 /** The marker every message this plugin mints carries, on its id. */
-export const INJECTED_ID_PREFIX = "fmac_"
+export const INJECTED_ID_PREFIX = "mega_"
 
 /** The id the injected Σ message carries — one per session, whatever the request. */
 export const STATE_MESSAGE_ID = INJECTED_ID_PREFIX + "state"

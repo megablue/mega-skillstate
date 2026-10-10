@@ -1,4 +1,4 @@
-# opencode-g-skill-state — behavior spec
+# mega-skillstate — behavior spec
 
 User-visible behavior only: what the product does and what a user sees,
 readable without knowing the code. Behavior belongs here even when the code is
@@ -12,7 +12,7 @@ the feature page for the area owns the mechanism. -->
 
 ## Scope
 
-`opencode-g-skill-state` is an OpenCode 2.0 CLI plugin that manages a session's
+`mega-skillstate` is an OpenCode 2.0 CLI plugin that manages a session's
 context window by carrying an **explicit, structured execution state (Σ)** instead of
 the usual ever-growing conversation history.
 
@@ -62,7 +62,7 @@ It deliberately does **not**:
 
 Every setting below is read the same way from any of three sources, most specific
 last: the plugin's built-in defaults, the `options.json` an installed copy
-carries, and a user-level `~/.config/opencode/g-skill-state.json` — which is
+carries, and a user-level `~/.config/opencode/mega-skillstate.json` — which is
 created on first run with every default in it and never overwritten afterwards.
 A source only replaces the keys it sets, so a partial file is fine. An unknown
 key, or a file that is not JSON, is an error: the plugin refuses to load rather

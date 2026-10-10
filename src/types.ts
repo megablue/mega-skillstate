@@ -19,7 +19,7 @@
  * strict. The check that matters still runs: a host shape we got wrong fails
  * assignment at this boundary.
  *
- * @module opencode-g-skill-state/types
+ * @module mega-skillstate/types
  */
 
 /** What a hook registration hands back; disposing it unregisters. */

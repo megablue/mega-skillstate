@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The pinning test for opencode-g-skill-state's hard rules.
+ * The pinning test for mega-skillstate's hard rules.
  *
  * It builds a fake host, loads the plugin exactly the way the OpenCode loader does,
  * and drives a synthetic `context` event whose transcript is a head instruction plus
@@ -40,11 +40,11 @@ const load = async (relative) => import(pathToFileURL(resolve(root, relative)).h
  * The user-level config path is redirected before the plugin is loaded.
  *
  * The plugin writes that file when it is missing, and this test must never touch a
- * real home: `OPENCODE_G_SKILL_STATE_CONFIG` points it at a scratch path, and the
+ * real home: `MEGA_SKILLSTATE_CONFIG` points it at a scratch path, and the
  * whole run cleans up after itself.
  */
-const scratchHome = mkdtempSync(join(tmpdir(), "skill-state-config-"))
-process.env.OPENCODE_G_SKILL_STATE_CONFIG = join(scratchHome, "g-skill-state.json")
+const scratchHome = mkdtempSync(join(tmpdir(), "mega-skillstate-config-"))
+process.env.MEGA_SKILLSTATE_CONFIG = join(scratchHome, "mega-skillstate.json")
 
 /** The options the smoke runs with, spelled out so the arithmetic below is pinned. */
 const OPTIONS = { keepRecentTurns: 4, min: 4, staleAfter: 8 }
@@ -241,14 +241,14 @@ function row(label, value) {
   console.log("  " + label.padEnd(34, ".") + " " + value)
 }
 
-console.log("opencode-g-skill-state smoke — " + root + "\n")
+console.log("mega-skillstate smoke — " + root + "\n")
 
 // ---------------------------------------------------------------------------
 // Load the plugin the way the host does, and register it against the fake host.
 // ---------------------------------------------------------------------------
 const plugin = await load("server.ts")
 assert.equal(typeof plugin.default, "object", "server.ts must export a default plugin")
-assert.equal(plugin.default.id, "opencode-g-skill-state")
+assert.equal(plugin.default.id, "mega-skillstate")
 assert.equal(typeof plugin.default.setup, "function", "the plugin must export setup")
 
 const host = createHost()
@@ -280,7 +280,7 @@ assert.ok(report !== undefined, "the hook returns its report")
 
 const stateMessage = messages[1]
 assert.ok(stateMessage !== undefined, "Σ must be injected")
-assert.equal(stateMessage.id, "fmac_state", "Σ carries the injected id prefix")
+assert.equal(stateMessage.id, "mega_state", "Σ carries the injected id prefix")
 assert.equal(stateMessage.role, "user")
 const stateText = stateMessage.content[0].text
 assert.ok(stateText.startsWith("<skill-state>"), "Σ is wrapped and labelled")
@@ -499,7 +499,7 @@ await plugin.default.setup(off.context)
 const offEvent = buildEvent(buildTranscript(20))
 await off.contextHooks[0](offEvent)
 assert.equal(
-  offEvent.messages.some((message) => message.id === "fmac_state"),
+  offEvent.messages.some((message) => message.id === "mega_state"),
   false,
   "collapseOlder: false leaves the transcript whole",
 )
@@ -511,7 +511,7 @@ await plugin.default.setup(child.context)
 const childEvent = buildEvent(buildTranscript(20))
 await child.contextHooks[0](childEvent)
 assert.equal(childEvent.messages.length, 61, "a subagent session is left alone")
-assert.equal(childEvent.messages.some((message) => message.id === "fmac_state"), false)
+assert.equal(childEvent.messages.some((message) => message.id === "mega_state"), false)
 row("subagent session", "left whole (allowSubagentSessions is off)")
 console.log("")
 
@@ -533,7 +533,7 @@ const stale = await reminderHook(reminderEvent)
 assert.equal(stale.nudged, true, "a reminder once the state has gone stale")
 assert.equal(stale.stepsSinceUser, OPTIONS.staleAfter)
 const reminder = reminderEvent.messages[reminderEvent.messages.length - 1]
-assert.equal(reminder.id, "fmac_notice_stale")
+assert.equal(reminder.id, "mega_notice_stale")
 assert.ok(reminder.content[0].text.includes("<skill-state>"))
 checkPairing(reminderEvent.messages, "the payload with a reminder")
 const again = await reminderHook(reminderEvent)
@@ -734,7 +734,7 @@ await plugin.default.setup(noStore.context)
 const noStoreEvent = buildEvent(buildTranscript(20))
 await noStore.contextHooks[0](noStoreEvent)
 assert.equal(noStoreEvent.messages.length, 14, "a host with no storage seam still collapses")
-assert.equal(noStoreEvent.messages[1].id, "fmac_state")
+assert.equal(noStoreEvent.messages[1].id, "mega_state")
 checkPairing(noStoreEvent.messages, "the payload on a host with no store")
 row("no storage seam", "in-memory only, the collapse is unchanged")
 
@@ -756,7 +756,7 @@ assert.ok(
 )
 assert.ok(logged.some((line) => line.includes("refused state/ses_broken")), "and so was the refused write")
 assert.equal(brokenEvent.messages.length, 14, "a store that refuses everything still collapses")
-assert.equal(brokenEvent.messages[1].id, "fmac_state", "and Σ is still injected")
+assert.equal(brokenEvent.messages[1].id, "mega_state", "and Σ is still injected")
 assert.deepEqual(brokenReport.notes, [], "and no failure escapes into the request's account")
 checkPairing(brokenEvent.messages, "the payload on a host with a broken store")
 row("broken store", "degraded to in-memory, reported, never threw")
@@ -781,7 +781,7 @@ console.log("")
   const { join } = await import("node:path")
 
   const install = await import("./install.ts")
-  const scratch = mkdtempSync(join(tmpdir(), "skill-state-install-"))
+  const scratch = mkdtempSync(join(tmpdir(), "mega-skillstate-install-"))
   const plugins = join(scratch, "plugins")
 
   // A package root that looks enough like one: the loader's entry has to exist,
@@ -790,7 +790,7 @@ console.log("")
   // a fourth literal for it, so a fake root without a manifest is no package root.
   const fakeRoot = join(scratch, "package")
   mkdirSync(fakeRoot, { recursive: true })
-  const manifestName = "opencode-g-skill-state"
+  const manifestName = "mega-skillstate"
   writeFileSync(join(fakeRoot, "server.ts"), "// a stand-in for the host entry\n")
   writeFileSync(
     join(fakeRoot, "package.json"),
@@ -919,9 +919,9 @@ console.log("")
 // ---------------------------------------------------------------------------
 {
   const config = await load("src/config.ts")
-  const dir = mkdtempSync(join(tmpdir(), "skill-state-config-"))
-  const userFile = join(dir, "g-skill-state.json")
-  process.env.OPENCODE_G_SKILL_STATE_CONFIG = userFile
+  const dir = mkdtempSync(join(tmpdir(), "mega-skillstate-config-"))
+  const userFile = join(dir, "mega-skillstate.json")
+  process.env.MEGA_SKILLSTATE_CONFIG = userFile
 
   // (a) A first run writes every default, pretty-printed — and a file that exists is
   // the user's own: it is never rewritten, edits included.

@@ -1,4 +1,4 @@
-# opencode-g-skill-state — design contract
+# mega-skillstate — design contract
 
 > Applies the **SKILL.state** runtime idea (see `docs/arXiv-2608.26263v2/acl_latex.tex`)
 > to OpenCode 2.0: bound the context window with an **explicit structured execution
@@ -57,7 +57,7 @@ Model every host call on the working plugin
 - Message: `{ id?, role, content: ContentPart[], metadata? }`. Parts:
   `{type:"text",text}` · `{type:"reasoning",text}` · `{type:"tool-call",id,name,input}` ·
   `{type:"tool-result",id,name,result:{type,value}}`. SystemPart: `{type:"text",text}`.
-- Injected messages carry an `fmac_` id prefix (see `view.ts` `INJECTED_ID_PREFIX`,
+- Injected messages carry an `mega_` id prefix (see `view.ts` `INJECTED_ID_PREFIX`,
   `isInjectedMessage`); the reference injects them as `role:"user"` text messages.
 - No token meter is exposed to plugins → estimate **4 chars/token** (`measureContext`,
   `roughTokens` in the reference `pass.ts`).
@@ -98,7 +98,7 @@ On each `context` event for session `S`:
    `tool.transform` is never called).
 3. **Guard.** If `isChild` (session has `parentID`) and `allowSubagentSessions !== true`, return.
 4. **Re-apply from scratch** (durable transcript is raw again): start from
-   `event.messages`; drop any previously-injected `skill_state` messages (`fmac_` state id).
+   `event.messages`; drop any previously-injected `skill_state` messages (`mega_` state id).
 5. **Measure** `tokens = measureContext(system, messages)`; resolve the model window via
    `model.transform` list (`windowOf`).
 6. **Collapse the superseded prefix** (when `collapseOlder` and past any `min`):
@@ -107,7 +107,7 @@ On each `context` event for session `S`:
      that is a **safe cut boundary** (`balance.cuts`) and **after** the protected head
      (first real user message, when `protectFirstUserMessage`).
    - The superseded region `(headEnd .. keepStartIdx-1)` is replaced by **one injected
-     message** `{ id: "fmac_state", role: "user", content:[{type:"text", text}] }` where
+     message** `{ id: "mega_state", role: "user", content:[{type:"text", text}] }` where
      `text` = a clear wrapper + **Σ rendered as compact JSON** + a one-line note naming
      the collapsed turn span. Do **not** collapse the protected head itself.
    - Never split a tool pair: only cut at `balance.cuts`; never append a state/notice

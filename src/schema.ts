@@ -8,7 +8,7 @@
  * module does not know and they are dropped; a patch sets a key to `null` and it is
  * deleted; an array replaces wholesale rather than merging element by element.
  *
- * @module opencode-g-skill-state/schema
+ * @module mega-skillstate/schema
  */
 
 /** Σ: a flat dictionary whose keys the schema owns. */

@@ -13,7 +13,7 @@
  * rules, the protected head and the balanced-tail rule still apply, because a hand-asked
  * collapse is not permission to split a tool pair.
  *
- * @module opencode-g-skill-state/command
+ * @module mega-skillstate/command
  */
 
 import {

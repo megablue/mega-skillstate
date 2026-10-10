@@ -96,9 +96,9 @@ ever co-exist, keep our field names aligned so a compaction message reads the sa
 
 ## Open design decisions (resolve in the integration pass)
 
-- Injection **role**: keep the host-proven `fmac_` **user**-role injected Σ message (matches
-  the reference plugin, pairing-safe with `inFlight === 0` tail rule) vs switch to the
-  semantically-cleaner `Message.system()`. Decide by what inserts cleanly between a protected
+- Injection **role**: keep the host-proven **user**-role injected Σ message (prefix `mega_`;
+  the reference plugin's `fmac_` pattern, pairing-safe with `inFlight === 0` tail rule) vs
+  switch to the semantically-cleaner `Message.system()`. Decide by what inserts cleanly between a protected
   user head and a rolling tool-paired recent window without breaking role ordering.
 - **Σ store**: `ctx.storage` + LRU cache vs LRU-only. Recommend `ctx.storage` + LRU cache.
 - Whether `/skillstate` and the `skill_state` tool remain the model's write channel, or the

@@ -1,4 +1,4 @@
-# opencode-g-skill-state — features map
+# mega-skillstate — features map
 
 Read this before touching code: find the area, then open only the one or two
 feature docs it points at.
@@ -20,7 +20,7 @@ refactors with no behavior, mechanism, config or test change need no edit.
 | Σ store & schema | [skill-state.md](skill-state.md) | Σ fields; a null that should delete; an unknown key that should be dropped; arrays replace vs merge; seeding from tools; state persistence / restart; render |
 | Compaction | [compaction.md](compaction.md) | the host asks for a compaction; a summary that lost the plan; Σ that never reaches a compaction; a restart before compaction |
 | skill_state tool & /skillstate | [skill-state-controls.md](skill-state-controls.md) | the model updating Σ; `state_patch`; the ack; a tool registered but never called; `/skillstate`; forcing a collapse; the stale reminder; **installing or uninstalling the plugin** |
-| Configuration | [configuration.md](configuration.md) | a setting does not take effect; where a config value comes from; the user-level `g-skill-state.json`; the plugin writing a config file on first run; an unknown key refusing to load |
+| Configuration | [configuration.md](configuration.md) | a setting does not take effect; where a config value comes from; the user-level `mega-skillstate.json`; the plugin writing a config file on first run; an unknown key refusing to load |
 
 <!-- One row per feature page (added as pages land). Keep "Read when" a trigger
 someone would search for — the file, the symbol, the symptom — not a

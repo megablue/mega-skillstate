@@ -24,7 +24,7 @@
  * - **A message is only appended at a balanced tail**, so nothing is ever inserted
  *   between a call and its result.
  *
- * @module opencode-g-skill-state/context
+ * @module mega-skillstate/context
  */
 
 import { resolveThresholds, type ResolvedConfig } from "./config.ts"
@@ -417,7 +417,7 @@ export async function applyTransform(deps: TransformDeps, input: TransformInput)
     } else if ((tail.inFlight[messages.length] ?? 0) > 0) {
       notes.push("a reminder was held: the payload ends inside a tool call")
     } else {
-      const id = "fmac_notice_stale"
+      const id = "mega_notice_stale"
       const text = nudgeText(descriptor.stepsSinceUser)
       const last = messages[messages.length - 1]
       const newest = (last?.content ?? []).find((part) => part.type === "text")

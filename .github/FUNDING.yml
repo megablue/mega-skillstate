@@ -1,0 +1,2 @@
+# PayPal isn't a native FUNDING key; `custom` is the mechanism for it.
+custom: ["https://www.paypal.me/mega3dp"]

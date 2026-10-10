@@ -1,3 +1,10 @@
+<div align="center">
+
+![mega-skillstate — explicit execution state for OpenCode](docs/assets/header.png)
+
+</div>
+
+
 # mega-skillstate
 
 An OpenCode 2.0 plugin that bounds a session's context window with an **explicit,
@@ -9,6 +16,7 @@ structured execution state (Σ)** instead of an append-only conversation history
 [![Version](https://img.shields.io/github/package-json/v/megablue/mega-skillstate?style=flat-square)](package.json)
 [![Topic: opencode-plugin](https://img.shields.io/badge/topic-opencode--plugin-0e7490.svg?style=flat-square)](https://github.com/topics/opencode-plugin)
 [![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg?style=flat-square)](package.json)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-ffdd00.svg?style=flat-square)](https://www.paypal.me/mega3dp)
 
 </div>
 
@@ -159,6 +167,11 @@ history with an explicit, mutable execution state — comes from **"SKILL.state:
 Scalable Long-Horizon Agent Skills"** by Sanket Badhe, Priyanka Tiwari and
 Jonghyun Chung (arXiv:2608.26263v2, accepted at EMNLP). This plugin is a port
 of that idea to the OpenCode host.
+
+## Support
+
+This plugin is free and MIT-licensed. If it earns its keep, you can
+[buy me a coffee](https://www.paypal.me/mega3dp).
 
 ## License
 

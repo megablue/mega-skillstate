@@ -60,24 +60,29 @@ It deliberately does **not**:
 
 ## Settings
 
-User-configurable values live in the plugin package's `options.json`
-(`options.json`; an installed discovery copy carries its own).
-Read the package `README.md` for install scope.
+Every setting below is read the same way from any of three sources, most specific
+last: the plugin's built-in defaults, the `options.json` an installed copy
+carries, and a user-level `~/.config/opencode/g-skill-state.json` — which is
+created on first run with every default in it and never overwritten afterwards.
+A source only replaces the keys it sets, so a partial file is fine. An unknown
+key, or a file that is not JSON, is an error: the plugin refuses to load rather
+than silently keeping a default. A file that cannot be written is reported and
+the plugin still runs. Read the package `README.md` for install scope.
 
-| Setting | Default | Range / clamp | Where |
-| --- | --- | --- | --- |
-| `enabled` | `true` | bool — master switch | `options.json` |
-| `min` | `4` | integer ≥ 0 — **minimum turns** before the superseded prefix is collapsed into Σ | `options.json` |
-| `keepRecentTurns` | `4` | integer ≥ 0 — newest turns kept verbatim beside Σ | `options.json` |
-| `collapseOlder` | `true` | bool — collapse the superseded prefix into Σ | `options.json` |
-| `protectFirstUserMessage` | `true` | bool — never collapse the first user instruction | `options.json` |
-| `allowSubagentSessions` | `false` | bool — also manage sub-agent (child) sessions | `options.json` |
-| `seedFromTools` | `true` | bool — keep `files`/`cwd`/`activeFiles`/`step` current from observed tool calls | `options.json` |
-| `trackTools` | `["read","edit","write","patch","glob","shell"]` | tool names scanned when seeding | `options.json` |
-| `nudgeWhenStale` | `true` | bool — remind the model to update Σ after a stretch with no new user message | `options.json` |
-| `staleAfter` | `8` | integer ≥ 0 — steps with no new user message before the reminder | `options.json` |
-| `manualCommand` | `true` | bool — expose the `/skillstate` command | `options.json` |
-| `debug` | `false` | bool — log pass decisions to stderr | `options.json` |
+| Setting | Default | Range / clamp |
+| --- | --- | --- |
+| `enabled` | `true` | bool — master switch |
+| `min` | `4` | integer ≥ 0 — **minimum turns** before the superseded prefix is collapsed into Σ |
+| `keepRecentTurns` | `4` | integer ≥ 0 — newest turns kept verbatim beside Σ |
+| `collapseOlder` | `true` | bool — collapse the superseded prefix into Σ |
+| `protectFirstUserMessage` | `true` | bool — never collapse the first user instruction |
+| `allowSubagentSessions` | `false` | bool — also manage sub-agent (child) sessions |
+| `seedFromTools` | `true` | bool — keep `files`/`cwd`/`activeFiles`/`step` current from observed tool calls |
+| `trackTools` | `["read","edit","write","patch","glob","shell"]` | tool names scanned when seeding |
+| `nudgeWhenStale` | `true` | bool — remind the model to update Σ after a stretch with no new user message |
+| `staleAfter` | `8` | integer ≥ 0 — steps with no new user message before the reminder |
+| `manualCommand` | `true` | bool — expose the `/skillstate` command |
+| `debug` | `false` | bool — log pass decisions to stderr |
 
 Controls the model/user touch: the `skill_state` tool (the model writes a
 `state_patch`, sets a key to `null` to delete it; keys the schema does not own are

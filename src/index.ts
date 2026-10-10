@@ -26,7 +26,7 @@ import type { Plugin } from "@opencode/plugin"
 import { fileURLToPath } from "node:url"
 
 import { createSkillStateCommand, type SkillStateCommandOptions } from "./command.ts"
-import { PLUGIN, resolveConfig, resolveOptions } from "./config.ts"
+import { PLUGIN, ensureUserConfig, resolveConfig, resolveOptions, userConfigPath } from "./config.ts"
 import { runCompaction } from "./compaction.ts"
 import { messageOf, runContextTransform, type TransformDeps } from "./context.ts"
 import { MAX_SESSIONS } from "./state.ts"
@@ -82,24 +82,37 @@ async function isChildSession(
  * @returns a cleanup that disposes every registration, newest first.
  */
 export async function setup(ctx: PluginContext): Promise<() => Promise<void>> {
-  // A refused configuration is loud on purpose: a context policy that quietly keeps a
-  // default is worse than one that refuses to load. The host's options win; a copy
-  // installed into a discovery directory carries its own `options.json`, because that
-  // install has no entry to hand it any (measured).
-  const config = resolveConfig(resolveOptions(ctx.options, OPTIONS_PATH))
-  const registrations: Registration[] = []
-
-  const disposeAll = async (): Promise<void> => {
-    for (const registration of registrations.splice(0).reverse()) {
-      await registration.dispose()
-    }
-  }
-
   const warn = (line: string): void => {
     try {
       console.error("[" + PLUGIN + "] " + line)
     } catch {
       // A host without a console still gets the plugin's behaviour, not its notes.
+    }
+  }
+
+  // The user-level file is the plugin's own half of the config surface, and it does not
+  // exist on a first run: it is written with every default before anything reads it, so
+  // the file a user edits is one they were given first. A home that cannot be written to
+  // is reported and the plugin still loads — the file is a convenience, the layers fall
+  // through to the defaults without it.
+  const userFile = userConfigPath()
+  try {
+    if (ensureUserConfig(userFile) === true) warn("wrote the default configuration to " + userFile)
+  } catch (error) {
+    warn("the user-level configuration at " + userFile + " could not be written: " + messageOf(error))
+  }
+
+  // A refused configuration is loud on purpose: a context policy that quietly keeps a
+  // default is worse than one that refuses to load. Three layers, most specific last:
+  // the host's own entry, the user's file (above), the copy an install carries. A copy
+  // installed into a discovery directory needs its own `options.json` because that
+  // install has no entry to hand it any (measured).
+  const config = resolveConfig(resolveOptions(ctx.options, OPTIONS_PATH, userFile))
+  const registrations: Registration[] = []
+
+  const disposeAll = async (): Promise<void> => {
+    for (const registration of registrations.splice(0).reverse()) {
+      await registration.dispose()
     }
   }
 

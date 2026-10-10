@@ -86,10 +86,13 @@ To see what the pass decided, check `/skillstate`.
 
 ## Config
 
-Options are read from the plugin entry's `options` when there is one, and otherwise from
-`options.json` at this package's root — so a directory install is configured by editing
-that file. Every key is validated on load, and an unknown key is an error rather than a
-silently ignored typo.
+Options are read, most specific last, from `options.json` at this package's root,
+from a user-level `~/.config/opencode/g-skill-state.json` — created on first run
+with every default in it, and never overwritten afterwards — and from the plugin
+entry's own `options` in `opencode.json`. A source only replaces the keys it
+sets, so a partial file is fine: a directory install is configured by editing that
+file, and a personal override is a file you own. Every key is validated on load,
+and an unknown key is an error rather than a silently ignored typo.
 
 | Key | Default | What it does |
 | --- | --- | --- |

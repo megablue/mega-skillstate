@@ -106,3 +106,4 @@ reminder appended only at a balanced tail.
 
 - `skill-state.md` — the schema + ⊕ merge the tool drives.
 - `context-collapse.md` — the transform the command reports on.
+- `configuration.md` — where the values for the keys above come from.

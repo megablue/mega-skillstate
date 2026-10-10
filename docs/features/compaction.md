@@ -70,3 +70,4 @@ called), **compaction guard** (empty Σ → result unset), **compaction after re
 - `skill-state.md` — Σ, the ⊕ merge and the durable store this seam reads.
 - `context-collapse.md` — the other seam, which injects Σ into every request.
 - `skill-state-controls.md` — the `skill_state` tool that maintains Σ during the session.
+- `configuration.md` — where the values for the keys above come from.

@@ -84,3 +84,4 @@ model-authored key come back), **compaction after restart**, **no storage seam**
 - `context-collapse.md` — where Σ is injected and the prefix collapsed.
 - `skill-state-controls.md` — the `skill_state` tool that writes Σ.
 - `compaction.md` — the compaction seam that reads Σ and owns the summary.
+- `configuration.md` — where the values for the keys above come from.

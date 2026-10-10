@@ -68,3 +68,4 @@ and subagent guards, stale reminder only at a balanced tail.
 
 - `skill-state.md` — the Σ schema, store and `⊕` merge being injected.
 - `skill-state-controls.md` — the `skill_state` tool and `/skillstate`.
+- `configuration.md` — where the values for the keys above come from.

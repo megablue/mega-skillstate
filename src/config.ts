@@ -9,11 +9,18 @@
  * @module opencode-g-skill-state/config
  */
 
-import { existsSync, readFileSync } from "node:fs"
-import { basename } from "node:path"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { basename, dirname, join } from "node:path"
+import { homedir } from "node:os"
 
 /** Package name; it is the plugin's id, and the label every message of its own is attributed to. */
 export const PLUGIN = "opencode-g-skill-state"
+
+/** The user-level config file's name, inside the host's own user configuration directory. */
+export const USER_CONFIG_FILENAME = "g-skill-state.json"
+
+/** The environment variable that points the user-level config file somewhere else. */
+export const USER_CONFIG_ENV = "OPENCODE_G_SKILL_STATE_CONFIG"
 
 /**
  * Everything the plugin reads, with the value used when the plugin entry says nothing.
@@ -135,31 +142,85 @@ function keys(object: unknown, allowed: Set<string>, label: string): Record<stri
 }
 
 /**
- * The options the plugin runs with: what the host handed it, or the file an installed
- * copy carries.
+ * The user-level config file: the host's own user directory, one plugin-named file in it.
  *
- * Measured on the reference plugin: an install that is only a directory under
- * `<configDir>/plugins/` is loaded with no `plugins` entry, and an entry naming a bare
- * package name hands it no options. So `options.json` inside the copy is read here —
- * the host's own options still win, because an entry that exists is the more specific
- * statement. A missing file is the defaults; a malformed one is an error, like every
- * other configuration mistake.
+ * The directory is the one this host keeps its user configuration in — the same one
+ * `opencode.json` and the other per-plugin files live in — so the file sits where a
+ * user already looks for settings. The environment override exists for tests, which
+ * must never write to a real home, and for a user who wants the file somewhere else
+ * entirely.
  */
-export function resolveOptions(hostOptions: unknown, optionsFile?: string): unknown {
-  if (hostOptions !== null && typeof hostOptions === "object" && Object.keys(hostOptions).length > 0) {
-    return hostOptions
-  }
-  if (optionsFile === undefined || !existsSync(optionsFile)) return hostOptions
+export function userConfigPath(): string {
+  const override = process.env[USER_CONFIG_ENV]
+  if (typeof override === "string" && override.length > 0) return override
+  return join(homedir(), ".config", "opencode", USER_CONFIG_FILENAME)
+}
+
+/**
+ * The user-level config file, written with every default when it does not exist yet.
+ *
+ * A user who has never seen one has nothing to edit it from, so a first run writes the
+ * defaults there, pretty-printed — and never again: a file that exists is the user's
+ * own, edits included, and is left exactly as it is. A write that fails is the
+ * caller's to report; this function throws rather than swallowing it.
+ *
+ * @param userFile - the file to write; defaults to `userConfigPath()`.
+ * @returns whether the file was created (`false` when it already existed).
+ * @throws when the directory or the file cannot be written.
+ */
+export function ensureUserConfig(userFile?: string): boolean {
+  const file = userFile ?? userConfigPath()
+  if (existsSync(file)) return false
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", "utf8")
+  return true
+}
+
+/** Read a JSON config file; a missing one is nothing at all, a malformed one is an error. */
+function readJsonFile(file: string | undefined, label: string): unknown {
+  if (file === undefined || !existsSync(file)) return undefined
   // A BOM is tolerated on purpose: an editor that writes one has still written JSON, and
   // the alternative is a plugin that refuses to load over an invisible byte.
-  const text = readFileSync(optionsFile, "utf8").replace(/^﻿/, "")
+  const text = readFileSync(file, "utf8").replace(/^﻿/, "")
   try {
     return JSON.parse(text) as unknown
   } catch (error) {
-    throw new Error(
-      "the installed " + basename(optionsFile) + " is not JSON: " + (error instanceof Error ? error.message : String(error)),
-    )
+    throw new Error(label + " is not JSON: " + (error instanceof Error ? error.message : String(error)))
   }
+}
+
+/** A layer that is not a plain object is a mistake, not a silent empty layer. */
+function objectLayer(value: unknown, label: string): Record<string, unknown> {
+  if (value === undefined || value === null) return {}
+  if (typeof value !== "object" || Array.isArray(value)) invalid(label, "must be an object")
+  return value as Record<string, unknown>
+}
+
+/**
+ * The options the plugin runs with: the layers that apply, merged key by key.
+ *
+ * Measured on the reference plugin: an install that is only a directory under
+ * `<configDir>/plugins/` is loaded with no `plugins` entry, and an entry naming a bare
+ * package name hands it no options. So files are read here, and the ladder is the
+ * specificity order — the host's own entry, the user-level file, then the copy an
+ * install carries. A layer overwrites only the keys it sets; the rest fall through,
+ * so a partial file is a valid file. A missing file is nothing at all; a malformed
+ * one is an error, like every other configuration mistake.
+ */
+export function resolveOptions(hostOptions: unknown, optionsFile?: string, userFile?: string): unknown {
+  const layers: Array<[unknown, string]> = [
+    [readJsonFile(optionsFile, "the installed " + basename(optionsFile ?? "options.json")), "the installed options"],
+    [readJsonFile(userFile, "the user-level " + basename(userFile ?? USER_CONFIG_FILENAME)), "the user-level config"],
+  ]
+  const merged: Record<string, unknown> = {}
+  for (const [raw, label] of layers) {
+    Object.assign(merged, objectLayer(raw, label))
+  }
+  // The host's entry applies only when it says something: an empty object is a host
+  // that was handed nothing, not a statement that every default should win.
+  const says = hostOptions !== null && typeof hostOptions === "object" && Object.keys(hostOptions).length > 0
+  if (says) Object.assign(merged, objectLayer(hostOptions, "the host's options"))
+  return merged
 }
 
 /**

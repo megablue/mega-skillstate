@@ -28,11 +28,23 @@
  */
 
 import assert from "node:assert/strict"
-import { resolve } from "node:path"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
 const root = resolve(process.argv[2] ?? ".")
 const load = async (relative) => import(pathToFileURL(resolve(root, relative)).href)
+
+/**
+ * The user-level config path is redirected before the plugin is loaded.
+ *
+ * The plugin writes that file when it is missing, and this test must never touch a
+ * real home: `OPENCODE_G_SKILL_STATE_CONFIG` points it at a scratch path, and the
+ * whole run cleans up after itself.
+ */
+const scratchHome = mkdtempSync(join(tmpdir(), "skill-state-config-"))
+process.env.OPENCODE_G_SKILL_STATE_CONFIG = join(scratchHome, "g-skill-state.json")
 
 /** The options the smoke runs with, spelled out so the arithmetic below is pinned. */
 const OPTIONS = { keepRecentTurns: 4, min: 4, staleAfter: 8 }
@@ -754,5 +766,68 @@ console.log("")
   row("install args", "three modes, an unknown flag is an error")
 }
 
+// ---------------------------------------------------------------------------
+// The config surface: a user-level file written with the defaults, layered over
+// the copy an install carries and under the host's own entry.
+//
+// Every path below is the redirected scratch one set before the plugin loaded,
+// so the bootstrap write never reaches a real home; the directory is removed
+// with the `scratchHome` cleanup at the end of this file.
+// ---------------------------------------------------------------------------
+{
+  const config = await load("src/config.ts")
+  const dir = mkdtempSync(join(tmpdir(), "skill-state-config-"))
+  const userFile = join(dir, "g-skill-state.json")
+  process.env.OPENCODE_G_SKILL_STATE_CONFIG = userFile
+
+  // (a) A first run writes every default, pretty-printed — and a file that exists is
+  // the user's own: it is never rewritten, edits included.
+  assert.equal(existsSync(userFile), false, "the redirected file starts absent")
+  await plugin.default.setup(createHost().context)
+  assert.ok(existsSync(userFile), "setup writes the user-level file when it is missing")
+  const written = readFileSync(userFile, "utf8")
+  assert.deepEqual(JSON.parse(written), config.DEFAULT_CONFIG, "the file carries every default")
+  assert.ok(written.endsWith("\n"), "and is newline-terminated")
+  await plugin.default.setup(createHost().context)
+  assert.equal(readFileSync(userFile, "utf8"), written, "an existing file is never rewritten")
+
+  // (b) The user-level layer beats the copy the install carries: `options.json`
+  // ships `keepRecentTurns: 4`, so a file that says 2 is what runs.
+  writeFileSync(userFile, JSON.stringify({ keepRecentTurns: 2 }) + "\n", "utf8")
+  const userLayer = hostWith({})
+  await plugin.default.setup(userLayer.context)
+  const userEvent = buildEvent(buildTranscript(20))
+  await userLayer.contextHooks[0](userEvent)
+  assert.equal(
+    userEvent.messages.length,
+    8,
+    "the user file's keepRecentTurns: 2 wins over the shipped options.json, got " + userEvent.messages.length,
+  )
+
+  // (c) The host's entry is the most specific layer, so its value wins over the user file's.
+  const hostLayer = hostWith({ keepRecentTurns: 5 })
+  await plugin.default.setup(hostLayer.context)
+  const hostEvent = buildEvent(buildTranscript(20))
+  await hostLayer.contextHooks[0](hostEvent)
+  assert.equal(
+    hostEvent.messages.length,
+    17,
+    "the host entry's keepRecentTurns: 5 wins over the user file's 2, got " + hostEvent.messages.length,
+  )
+
+  // (d) A malformed user-level file is an error, like every other config mistake.
+  writeFileSync(userFile, "{ not json", "utf8")
+  await assert.rejects(
+    async () => plugin.default.setup(createHost().context),
+    /is not JSON/,
+    "a user-level file that is not JSON refuses the load",
+  )
+  rmSync(dir, { recursive: true, force: true })
+
+  row("user config", "written with the defaults when absent, never rewritten")
+  row("config layers", "options.json < user file < host entry (window 2, then 5)")
+}
+
 await dispose().catch(() => {})
+rmSync(scratchHome, { recursive: true, force: true })
 console.log("\nsmoke: ok")

@@ -29,17 +29,31 @@ export interface StateField {
  * active_files / working_dir / cmd_summary`), re-cut for a coding agent. Configurable
  * per install only by replacing this module — the keys are the contract the tool
  * enforces, so they are code, not options.
+ *
+ * Two container rules decide which shape a key takes, and both serve one thing: a
+ * write must never silently lose what an earlier write put in Σ.
+ *
+ * 1. **A key whose entry is a thing and its reason is a map** (`name -> …`): `⊕` merges
+ *    dictionaries key by key, so a finding or a decision written today survives a patch
+ *    that does not mention it. A list would replace the lot wholesale.
+ * 2. **A key that *is* the current state is a list** (`plan`, `done`, `open`): the newest
+ *    full list is the truth, and the hints ask for the whole list rather than a delta.
+ *
+ * `kind` records that rule for whoever edits this module. It is **not** a validator —
+ * `merge` never rejects a shape mismatch — so the hints are the contract the model
+ * actually reads, and each one names its own shape.
  */
 export const STATE_FIELDS: readonly StateField[] = [
   { key: "objective", hint: "the current sub-goal, one line", kind: "string" },
   { key: "plan", hint: "steps, each { step, status: done|active|todo|blocked }", kind: "list" },
-  { key: "done", hint: "what is completed, one line each", kind: "list" },
-  { key: "findings", hint: "key facts and discovered flags; hypotheses verified or ruled out", kind: "list" },
+  { key: "done", hint: "a list of one-line items: what is completed", kind: "list" },
+  // The three accumulated logs: a map, so a later write merges instead of replacing.
+  { key: "findings", hint: "name -> key fact or discovered flag; hypotheses verified or ruled out", kind: "map" },
   { key: "files", hint: "path -> what we know or did there", kind: "map" },
-  { key: "decisions", hint: "semantic or architectural decision and why, one line each", kind: "list" },
-  { key: "errors_tried", hint: "approach that failed and why, so it is not repeated", kind: "list" },
+  { key: "decisions", hint: "name -> the decision and why, one line each", kind: "map" },
+  { key: "errors_tried", hint: "name -> the approach that failed and why, so it is not repeated", kind: "map" },
   { key: "working", hint: "the environment: { cwd, branch, activeFiles }", kind: "map" },
-  { key: "open", hint: "blockers, open questions, concrete next actions", kind: "list" },
+  { key: "open", hint: "a list: blockers, open questions, concrete next actions", kind: "list" },
   { key: "step", hint: "integer, the current step index", kind: "integer" },
 ]
 

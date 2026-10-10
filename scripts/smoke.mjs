@@ -368,6 +368,16 @@ const nested = schema.merge(
 )
 assert.deepEqual(nested, { files: { "a.ts": "read", "c.ts": "written" } }, "dictionaries merge, and null deletes inside one")
 
+// The accumulated logs are maps for exactly that reason: a decision or a finding written
+// today must merge rather than replace, so yesterday's entry survives a patch that does
+// not mention it. `plan` is the opposite case — the current plan *is* the newest list.
+const logs = schema.merge(
+  { findings: { "first finding": "one line" }, decisions: { "bootstrap": "write the defaults" } },
+  { findings: { "second finding": "one line" }, decisions: { "precedence": "layered" } },
+)
+assert.deepEqual(logs.findings, { "first finding": "one line", "second finding": "one line" }, "findings merge key by key")
+assert.equal(Object.keys(logs.decisions).length, 2, "and so do decisions")
+
 const listed = schema.merge({ plan: [{ step: "a", status: "todo" }] }, { plan: [{ step: "b", status: "todo" }] })
 assert.equal(listed.plan.length, 1, "an array replaces wholesale")
 assert.equal(listed.plan[0].step, "b")
@@ -380,7 +390,7 @@ const alpha = schema.render({ files: { "b.ts": "read", "a.ts": "read" }, objecti
 const beta = schema.render({ objective: "x", files: { "a.ts": "read", "b.ts": "read" } })
 assert.equal(alpha, beta, "the same Σ renders the same bytes whatever order it was written in")
 
-row("merge", "null deletes, unknown keys dropped, arrays replace, objects merge")
+row("merge", "null deletes, unknown keys dropped, arrays replace, log maps merge")
 row("render", "stable key order, " + alpha.length + " chars")
 console.log("")
 
@@ -390,7 +400,7 @@ console.log("")
 const tool = host.tools[0]
 const ack = await tool.execute(
   {
-    state_patch: { objective: "bound the window", findings: ["Σ is the record"], not_a_key: 3 },
+    state_patch: { objective: "bound the window", findings: { "Σ is the record": "a fact Σ carries" }, not_a_key: 3 },
     summary: "first write",
   },
   { sessionID: "ses_smoke", agent: "build", messageID: "msg_1", id: "call_state", signal: new AbortController().signal },
@@ -411,7 +421,7 @@ row("skill_state ack", ackText.replace(/\n/g, " · "))
 const persisted = host.storage.map.get("state/ses_smoke")
 assert.ok(persisted !== undefined, "a state write reaches the durable store")
 assert.equal(persisted.state.objective, "bound the window")
-assert.deepEqual(persisted.state.findings, ["Σ is the record"])
+assert.deepEqual(persisted.state.findings, { "Σ is the record": "a fact Σ carries" })
 assert.ok(host.storage.calls.sets.includes("state/ses_smoke"), "the write went through storage.set")
 assert.deepEqual(persisted.collapsed, { from: 2, to: 17 }, "the committed span is durable too")
 row("durable write", "state/ses_smoke persisted " + Object.keys(persisted.state).join(", "))
@@ -597,7 +607,11 @@ const restartEvent = buildEvent(buildTranscript(20))
 restartEvent.sessionID = "ses_restart"
 await host.tools[0].execute(
   {
-    state_patch: { objective: "bound the window", findings: ["Σ outlives the process"], done: ["the wrapper module"] },
+    state_patch: {
+      objective: "bound the window",
+      findings: { "Σ outlives the process": "the durable store survives a restart" },
+      done: ["the wrapper module"],
+    },
   },
   { sessionID: "ses_restart", agent: "build", messageID: "msg_r", id: "call_r", signal: new AbortController().signal },
 )

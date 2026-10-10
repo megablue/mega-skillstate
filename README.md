@@ -121,10 +121,10 @@ pair is a bug, not a tuning.
   "objective":    the current sub-goal, one line
   "plan":         steps, each { step, status: done|active|todo|blocked }
   "done":         what is completed, one line each
-  "findings":     key facts and discovered flags; hypotheses verified or ruled out
+  "findings":     name -> key fact or discovered flag; hypotheses verified or ruled out
   "files":        path -> what we know or did there
-  "decisions":    semantic or architectural decision and why, one line each
-  "errors_tried": approach that failed and why, so it is not repeated
+  "decisions":    name -> the decision and why, one line each
+  "errors_tried": name -> the approach that failed and why, so it is not repeated
   "working":      the environment: { cwd, branch, activeFiles }
   "open":         blockers, open questions, concrete next actions
   "step":         integer, the current step index

@@ -9,11 +9,15 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-10`, **end of session** — `master` is `a7b2acf` ← `983b877` ← `b15fc35` ←
+As of `2026-10-10`, **end of session** — `master` is **clean at this tip** (the Σ log-key
+shape fix) ← `528ff7d` ← `525277a` ← `27f45d4` ← `a7b2acf` ← `983b877` ← `b15fc35` ←
 `c15c38e` (v0.2) ← `ab08b26` (v0.1). `2026-10-09` was v0.1. `b15fc35` untracked the paper;
-`983b877` flattened the package; `a7b2acf` added install/uninstall. The first two are
-structural: no behaviour was meant to change, and the pinning numbers confirm it.
-The working tree is **clean at the tip** — `a7b2acf` is the last thing delivered.
+`983b877` flattened the package; `27f45d4` renamed the plugin; `525277a` credited the paper
+in the README; `a7b2acf` added install/uninstall; `528ff7d` added the user-level config
+source (bootstrapped with the defaults on first run, layered under the host entry); this
+commit re-cut Σ's log keys as maps. The first two commits are structural: no behaviour was
+meant to change, and the pinning numbers confirm it. `git rev-parse HEAD` for the sha —
+this file does not name itself, because amending the fill-in would rewrite it again.
 
 ## State
 
@@ -69,6 +73,13 @@ The working tree is **clean at the tip** — `a7b2acf` is the last thing deliver
   (61 → 14 messages, 15406 → 3642 tokens) and the smoke still pins idempotence, the
   durable write, the restart, the compaction path and its guard, and the no-store and
   broken-store degradations — so the flatten is behaviour-neutral, as it should be.
+- **Σ's log keys are maps, not arrays** (this commit). `findings`/`decisions`/`errors_tried`
+  were declared `kind: "list"` while every live session wrote them as `{ name: reason }`
+  maps — `kind` is declarative, `merge` never enforced it, so the mismatch passed silently
+  and the model had to guess the shape. The three keys now carry shape-naming hints
+  (`name -> …`), `done`/`open` say `a list:`, and the smoke pins the merge both ways (log
+  maps merge; `plan` still replaces). No migration: a state written in the old shape is
+  replaced wholesale by the next write to that key.
 - **New module `src/compaction.ts`**; `src/state.ts` is now async and durable; `src/seed.ts`
   gained `seedHintsFromMessages` (whole transcript) beside `seedHints` (the kept window).
 - Docs updated in the same change: `docs/SPEC.md` (new **Compaction** section; the

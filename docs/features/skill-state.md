@@ -60,8 +60,16 @@ User-visible behavior: `docs/SPEC.md` → Scope, Compaction. The state is the su
 
 - **A record captures the storage handle at creation.** One plugin instance per process, so this
   is invisible in practice, but two hosts in one process do not share a store.
-- **Arrays replace.** `plan`/`done`/`findings` are replaced wholesale by a patch; the model must
-  send the full new list, not a delta. Intentional; pinned by the smoke test.
+- **Arrays replace, and only the current-state keys are arrays.** `plan`/`done`/`open` are
+  replaced wholesale by a patch; the model must send the full new list, not a delta. The
+  accumulated logs — `findings`/`decisions`/`errors_tried` — are **maps**, so a later write
+  merges key by key and an entry made yesterday survives a patch that does not mention it.
+  Both shapes are pinned by the smoke test.
+- Trap — **`kind` is declarative, not a validator.** `STATE_FIELDS.kind` documents each
+  key's shape and `merge` never rejects a mismatch, so a wrong-shaped write passes silently.
+  The *hints* are the contract the model actually reads, which is why every hint names its
+  own shape (`name -> …` for a map, `a list:` for an array) — when one is ambiguous the
+  model drifts, which is exactly how this trap was found.
 
 ## Config keys / UI
 
@@ -73,8 +81,9 @@ User-visible behavior: `docs/SPEC.md` → Scope, Compaction. The state is the su
 
 ## Tests that pin it
 
-`scripts/smoke.mjs` — merge (null deletes, unknown keys dropped, arrays replace, objects merge),
-stable render, **durable write** (`state/ses_smoke` persisted with the model's keys and the
+`scripts/smoke.mjs` — merge (null deletes, unknown keys dropped, arrays replace, and the
+log maps merge: a second `findings`/`decisions` patch adds rather than replaces), stable
+render, **durable write** (`state/ses_smoke` persisted with the model's keys and the
 committed span), **restart** (`resetStateStore` + the store kept: Σ, the span and every
 model-authored key come back), **compaction after restart**, **no storage seam**,
 **broken store** (reported, never thrown), seeding fills holes only, idempotence.

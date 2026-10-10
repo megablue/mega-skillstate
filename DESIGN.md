@@ -74,10 +74,10 @@ Model every host call on the working plugin
   "objective":      "current sub-goal, one line",
   "plan":           [ { "step": "…", "status": "done|active|todo|blocked" } ],
   "done":           ["completed, one line each"],
-  "findings":       ["key facts / discovered flags; hypotheses verified or ruled out"],
+  "findings":       { "<name>": "key facts / discovered flags; hypotheses verified or ruled out" },
   "files":          { "<path>": "what we know or did there" },
-  "decisions":      ["semantic/architectural decision and why, one line each"],
-  "errors_tried":   ["approach that failed, and why (so it is not repeated)"],
+  "decisions":      { "<name>": "semantic/architectural decision and why, one line each" },
+  "errors_tried":   { "<name>": "approach that failed, and why (so it is not repeated)" },
   "working":        { "cwd": "…", "branch": "…", "activeFiles": [<paths>] },
   "open":           ["blockers, open questions, concrete next actions"],
   "step":           <integer current step index>

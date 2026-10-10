@@ -707,63 +707,136 @@ row("broken store", "degraded to in-memory, reported, never threw")
 console.log("")
 
 // ---------------------------------------------------------------------------
-// The installer: link, idempotence, and the one rule that can destroy work.
+// The installer: copy, idempotence on bytes, named drift, and the legacy link.
 //
 // `scripts/install.ts` runs against a scratch directory, never against the real
 // discovery dirs, so the smoke test can prove the destructive case without being
-// destructive. The rule under test is `removeLink`: a junction is deleted with a
-// bare rmSync, never a recursive one, because recursing follows the link and
-// deletes the *target's* contents.
+// destructive. What is pinned here: an install is a real directory holding exactly
+// the shipped set — the manifest's `files[]` plus `package.json` itself, without
+// which the copy cannot load as ESM; a copy that matches byte for byte is left
+// alone; a drifted copy is synced, and driftReport *names* what differed; and a
+// junction left from before the copy switch is replaced without recursion,
+// because recursing follows the link and deletes the *target's* contents.
 // ---------------------------------------------------------------------------
 {
-  const { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } = await import("node:fs")
+  const { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } =
+    await import("node:fs")
   const { tmpdir } = await import("node:os")
   const { join } = await import("node:path")
 
   const install = await import("./install.ts")
   const scratch = mkdtempSync(join(tmpdir(), "skill-state-install-"))
-  const linkDir = join(scratch, "plugins")
+  const plugins = join(scratch, "plugins")
 
   // A package root that looks enough like one: the loader's entry has to exist,
-  // and the manifest is where the discovery-directory name is read from. The
-  // installer derives the link's name rather than carrying a fourth literal for
-  // it, so a fake root without a manifest is no longer a package root.
+  // and the manifest is where both the discovery-directory name and the shipped
+  // set are read from. The installer derives the copy's name rather than carrying
+  // a fourth literal for it, so a fake root without a manifest is no package root.
   const fakeRoot = join(scratch, "package")
   mkdirSync(fakeRoot, { recursive: true })
   const manifestName = "opencode-g-skill-state"
   writeFileSync(join(fakeRoot, "server.ts"), "// a stand-in for the host entry\n")
-  writeFileSync(join(fakeRoot, "package.json"), JSON.stringify({ name: manifestName }) + "\n")
+  writeFileSync(
+    join(fakeRoot, "package.json"),
+    JSON.stringify({ name: manifestName, files: ["server.ts", "keep.txt"] }) + "\n",
+  )
   writeFileSync(join(fakeRoot, "keep.txt"), "the target's own content\n")
-  const linkPath = join(linkDir, manifestName)
+  const copyPath = join(plugins, manifestName)
 
   try {
-    const first = install.installInto(linkDir, fakeRoot)
-    assert.equal(first.action, "linked", "the first install creates the link")
-    assert.ok(existsSync(linkPath), "the link exists on disk")
-    assert.ok(lstatSync(linkPath).isSymbolicLink(), "and it is a link, not a copy")
-    assert.equal(install.installInto(linkDir, fakeRoot).action, "current", "a second install is a no-op")
-    assert.ok(existsSync(join(linkPath, "keep.txt")), "the link resolves into the target")
+    // (a) The install is a real directory, holding exactly the shipped set.
+    // package.json is in the copy even though the fake manifest's files[] omits
+    // it, and that is the pin that matters: "type": "module" is what makes the
+    // host load the .ts as ESM, and a copy without its manifest fails to load.
+    const first = install.installInto(plugins, fakeRoot, "user")
+    assert.equal(first.action, "installed", "the first install writes a copy")
+    assert.equal(first.scope, "user", "and the scope is propagated, not hardcoded")
+    assert.ok(existsSync(copyPath), "the copy exists on disk")
+    assert.ok(!lstatSync(copyPath).isSymbolicLink(), "and it is a real directory, not a link")
+    for (const shipped of ["server.ts", "package.json", "keep.txt"]) {
+      assert.ok(existsSync(join(copyPath, shipped)), "the copy carries " + shipped)
+    }
+    assert.deepEqual(
+      install.shippableFiles(fakeRoot),
+      ["server.ts", "keep.txt", "package.json"],
+      "the shipped set is files[] plus package.json itself",
+    )
+    assert.deepEqual(
+      install.driftReport(copyPath, fakeRoot),
+      { missing: [], changed: [], extra: [] },
+      "a fresh copy does not drift",
+    )
 
-    // A link pointing somewhere else is replaced rather than trusted.
+    // (b) Idempotence is measured on bytes: an in-sync copy is left alone, never
+    // rewritten, so a reinstall is not a churn of mtimes.
+    const second = install.installInto(plugins, fakeRoot, "user")
+    assert.equal(second.action, "current", "a second install is a no-op")
+    assert.equal(second.changed, 0, "and it writes nothing")
+
+    // (c) Drift is named, then synced: a reinstall is an upgrade. Each of the
+    // three failure modes — a file edited in place, a file deleted, a file the
+    // repository never shipped — is reported before it is repaired.
+    writeFileSync(join(copyPath, "keep.txt"), "edited in place, like a stale copy\n")
+    assert.deepEqual(install.driftReport(copyPath, fakeRoot).changed, ["keep.txt"], "an edited file is changed")
+    rmSync(join(copyPath, "server.ts"))
+    assert.deepEqual(
+      install.driftReport(copyPath, fakeRoot).missing,
+      ["server.ts"],
+      "a deleted file is missing",
+    )
+    writeFileSync(join(copyPath, "stray.txt"), "not in the shipped set\n")
+    assert.deepEqual(install.driftReport(copyPath, fakeRoot).extra, ["stray.txt"], "an unshipped file is extra")
+    const repaired = install.installInto(plugins, fakeRoot, "user")
+    assert.equal(repaired.action, "updated", "a drifted copy is synced")
+    assert.deepEqual(
+      install.driftReport(copyPath, fakeRoot),
+      { missing: [], changed: [], extra: [] },
+      "the sync leaves no drift behind",
+    )
+    assert.equal(
+      readFileSync(join(copyPath, "keep.txt"), "utf8"),
+      "the target's own content\n",
+      "and the sync restores the shipped bytes",
+    )
+
+    // (d) The destructive case, kept from the link era: a junction is removed
+    // without recursion. Recursing follows the link and deletes the *target's*
+    // contents — this repository, in production.
     const staleTarget = join(scratch, "stale")
     mkdirSync(staleTarget, { recursive: true })
     writeFileSync(join(staleTarget, "server.ts"), "// a deleted checkout's stand-in\n")
-    rmSync(linkPath)
-    symlinkSync(staleTarget, linkPath, "junction")
-    assert.equal(install.installInto(linkDir, fakeRoot).action, "replaced", "a stale link is replaced")
-    assert.ok(existsSync(join(linkPath, "keep.txt")), "and it now points at this package")
+    writeFileSync(join(staleTarget, "keep.txt"), "the legacy target's own content\n")
+    rmSync(copyPath, { recursive: true, force: true })
+    symlinkSync(staleTarget, copyPath, "junction")
+    const migrated = install.installInto(plugins, fakeRoot, "user")
+    assert.equal(migrated.action, "replaced", "a legacy junction is replaced with a copy")
+    assert.ok(!lstatSync(copyPath).isSymbolicLink(), "the junction is gone")
+    assert.ok(existsSync(join(copyPath, "package.json")), "and the copy ships the manifest")
+    assert.equal(existsSync(join(staleTarget, "keep.txt")), true, "the junction's target is left intact")
 
-    // The destructive case: removing a link must leave the target's contents alone.
-    // A recursive rmSync here would delete `fakeRoot` — this repository, in production.
-    install.uninstallFrom(linkDir, fakeRoot)
-    assert.equal(existsSync(linkPath), false, "the link is gone")
-    assert.equal(existsSync(join(fakeRoot, "keep.txt")), true, "the target's contents survive")
-    assert.equal(existsSync(join(fakeRoot, "server.ts")), true, "so does the host entry")
+    // (e) Uninstall deletes a real directory, and a legacy link the same
+    // cautious way. The repository the fake root stands in for survives both.
+    install.uninstallFrom(plugins, fakeRoot, "user")
+    assert.equal(existsSync(copyPath), false, "the copy is gone")
+    assert.equal(existsSync(join(fakeRoot, "server.ts")), true, "so is not the repository itself")
+    assert.equal(
+      install.uninstallFrom(plugins, fakeRoot, "user").action,
+      "missing",
+      "a second removal has nothing to do",
+    )
+    symlinkSync(staleTarget, copyPath, "junction")
+    assert.equal(
+      install.uninstallFrom(plugins, fakeRoot, "project").action,
+      "removed",
+      "a legacy junction uninstalls too",
+    )
+    assert.equal(existsSync(join(staleTarget, "keep.txt")), true, "and still leaves the target alone")
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }
 
-  row("install", "linked, idempotent, stale links replaced, target survives")
+  row("install", "copied, idempotent on bytes, drift named and synced, junctions migrated")
+
 
   // Three modes, and the flag parser rejects anything it does not know.
   assert.deepEqual(

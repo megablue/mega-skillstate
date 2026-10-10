@@ -37,17 +37,23 @@ touching the real home.
 - **Why a user-level file at all.** An install that is only a directory under
   `~/.config/opencode/plugins/` is loaded with no host entry (measured on the
   reference plugin), so `options.json` inside the copy is the only file it reads.
-  With the project-scope junction install that file *is the repository's*, so a
-  per-user setting would have to be committed. The user-level file gives a user
-  their own layer without touching the repo or the shipped manifest.
+  With the old junction install that file *was the repository's*, so a per-user
+  setting had to be committed; with a copy install it is a copy, so a setting
+  edited into it is overwritten by the next reinstall. Either way the user-level
+  file is the layer that is neither: per-user, never committed, surviving an
+  install, and outranking the copy's `options.json`.
 - **The ladder, key by key.** A later layer overwrites only the keys it sets; the
   rest fall through to the layer below. The shipped `options.json` lists all 12
   keys, so the merge changes no behaviour today — it becomes true layering the
   moment someone trims that file or ships a partial one.
-- **The junction trap.** `.opencode/plugin/opencode-g-skill-state` is a junction
-  to the repo root, so editing the repo's `options.json` changes the live plugin
-  for every project. The user-level file outranks it, which is the point: it is
-  per-user, never committed, and survives an install.
+- **The drift trap.** `.opencode/plugin/opencode-g-skill-state` is a *copy* of the shipped
+  set, so editing the repository's `options.json` no longer changes the live plugin for any
+  project — the install keeps its own copy until a reinstall syncs it. That is the trap
+  under copy semantics: an edit in the repository reaches nothing until
+  `npm run plugin:install` runs and OpenCode restarts, and `--status` names the drift
+  (files missing, changed, extra) rather than leaving you to deduce it. The user-level file
+  outranks the installed copy, which is the point: it is per-user, never committed, and
+  survives an install.
 - **Why a failed write warns and never throws.** The file is a convenience — the
   layers fall through to the defaults without it. A *missing* file is not an
   error; a *malformed* one is, like every other configuration mistake.

@@ -63,22 +63,41 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 
 ### Install & uninstall (`scripts/install.ts`)
 
-- **The install is a link, not a copy.** The host discovers a plugin by resolving
+- **The install is a copy, not a link.** The host discovers a plugin by resolving
   `<root>/server(.ts|.js)` inside `~/.config/opencode/plugins/` (user scope) or
   `<project>/.opencode/plugin/` (project scope). Nothing else is required: no global config
-  entry, no build step, no dependency to install. So the installer's whole job is to put a
-  link in the right directory — which is why it is a script rather than a package manifest.
-- **The link makes a checkout live.** An edit to `src/` is picked up on the next request,
-  so the plugin under test is always this working tree. The trade is a second place the
-  repo can break: a junction pointing at a deleted directory is *discovered as a plugin that
-  fails to load*, indistinguishable from a broken one.
-- **Trap — a link is deleted without recursion.** `rmSync(path, { recursive: true })` on a
-  junction follows the link and deletes the *target's* contents — this repository included.
-  `removeLink` therefore uses `lstatSync` to tell a link from a real directory and issues a
-  bare `rmSync` for a link. Never `Remove-Item -Recurse` one by hand.
-- **Trap — a stale link is replaced, not re-used.** `installInto` reads what the link
-  currently points at (`readlinkSync`); a link to anywhere other than this package root is
-  removed and re-created. Idempotence is checked on the *target*, not on the link's presence.
+  entry, no build step, no dependency to install — the package has zero runtime
+  dependencies, so a copy needs no `node_modules`. So the installer's whole job is to place
+  a copy of the shippable set in the right directory, which is why it is a script rather
+  than a package manifest.
+- **The copy beats the link on every axis that survives a restart.** The host imports the
+  plugin's module graph once per process, so a link and a copy are equally live only after a
+  restart — the old claim that an edit to `src/` is live on the next request was never true
+  (the installer's own `--help` has always said "A code change needs an OpenCode restart").
+  What the copy adds: the install is a real directory in the shape a user gets, it cannot
+  break because a working tree moved, and it can be **compared** against the repository, so
+  a stale install is diagnosable drift rather than a plugin quietly running old code.
+- **The shipped set is read from the manifest.** `shippableFiles(root)` reads `package.json`'s
+  `files[]` and always appends `package.json` itself — `"type": "module"` is what makes the
+  host load the `.ts` as ESM, and a copy without its manifest fails to load. Every entry is
+  checked against the tree, so a manifest listing a missing file is an install-time error
+  rather than a silently incomplete copy.
+- **Idempotence is measured on bytes.** `installInto` compares `sha256` hashes first: a copy
+  matching the shipped set exactly is left alone (`action: "current"`, nothing written); a
+  drifted copy is replaced wholesale (`"updated"`), because a reinstall is an upgrade.
+  `driftReport(path, root)` names what differs — `missing`, `changed`, `extra` — which is the
+  diagnostic a link could never give, since a junction always agreed with itself.
+- **Trap — an old install is a junction, and a junction is deleted without recursion.** The
+  installs in both scopes were junctions to the repo root before the copy switch, and they
+  are still there until the first reinstall. `removeLink` uses `lstatSync` to tell a link
+  from a real directory and issues a bare `rmSync` for a link: recursing follows the junction
+  and deletes the *target's* contents — this repository included. Never `Remove-Item
+  -Recurse` one by hand. A real directory is deleted with the recursive form, which is safe
+  because no link is followed.
+- **Trap — a drifted copy is a real state, not a broken one.** `--status` reports a junction
+  as "from before the copy switch; install replaces it", and a copy as in-sync or drifted
+  with named counts. A drifted copy installs fine and runs old code; the fix is a reinstall,
+  not a hunt for the reason discovery stopped working.
 - **A code change needs a restart.** The host does not watch module files; the plugin row is
   resolved once per server process. `plugin:status` reports what the *filesystem* says, which
   is why it can disagree with a running host that has not re-scanned. See the restart trap in

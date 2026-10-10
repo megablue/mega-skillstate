@@ -43,15 +43,20 @@ One command, from this repository. There is no build step: the host resolves
     npm run plugin:install            # user scope: every project on this machine
     npm run plugin:install:project    # project scope: this repository only
 
-Both create a **link** rather than a copy, so the plugin under test is the one in this
-working tree — an edit to `src/` is live on the next request, which is what makes a
-development checkout usable. The user scope is `~/.config/opencode/plugins/`; the project
-scope is `<this repo>/.opencode/plugin/`. Both discovery directories are read.
+Both **copy** the plugin's shippable set — `package.json`'s `files[]` plus `package.json`
+itself, which the ESM load needs — into the discovery directory. There is no build step and
+no `node_modules`: the package has no runtime dependencies, and the host loads the
+TypeScript source directly. A copy is what a user install looks like, it cannot break
+because a working tree moved, and it can be compared against the repository, so a stale
+install is diagnosable drift instead of a plugin quietly running old code. The user scope is
+`~/.config/opencode/plugins/`; the project scope is `<this repo>/.opencode/plugin/`. Both
+discovery directories are read.
 
 **Restart OpenCode after installing, and after any code change.** The host does not watch
 module files; the profile loads them once per process. Editing `docs/` needs nothing.
 
-To see where the plugin is discoverable from without changing anything:
+To see where the plugin is discoverable from without changing anything — and whether an
+installed copy has drifted from the repository:
 
     npm run plugin:status
 
@@ -60,15 +65,14 @@ To remove it:
     npm run plugin:uninstall            # user scope
     npm run plugin:uninstall -- --project   # project scope
 
-The installer is idempotent: re-running `plugin:install` when the link is already correct
-changes nothing, and a link pointing anywhere else — including at a directory that no
-longer exists — is replaced rather than left to fail as a broken plugin.
+The installer is idempotent: re-running `plugin:install` when the copy already matches the
+shipped set byte for byte changes nothing at all. A drifted copy is replaced with a fresh
+one, because a reinstall is an upgrade.
 
-> **Why the link is not a copy.** A junction that points at a deleted directory is
-> discovered as a plugin that then fails to load, which is indistinguishable from a
-> broken plugin. If you move or rename this checkout, re-run `plugin:install` to repoint
-> it, and do so *before* deleting the old directory. Deleting a junction with
-> `Remove-Item -Recurse` can follow the link and delete the repository's contents.
+> **An install from before the copy switch.** Older versions linked the plugin with a
+> junction rather than copying it. The first `plugin:install` replaces such a link with a
+> copy — it removes the link itself and leaves the repository it pointed at intact, so you
+> never have to delete a junction by hand for this.
 
 ## Using it
 

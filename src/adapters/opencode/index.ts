@@ -41,8 +41,15 @@ import type {
   SystemPart,
 } from "./types.ts"
 
-/** Where an installed copy keeps its own options: the package root, two levels above `src/adapters/opencode/`. */
-const OPTIONS_PATH = fileURLToPath(new URL("../../options.json", import.meta.url))
+/**
+ * Where an installed copy keeps its own options: the package root, three levels
+ * above `src/adapters/opencode/`.
+ *
+ * Exported so the smoke test can pin the depth. A wrong depth reads a file that
+ * does not exist, and the merge treats a missing layer as nothing at all, so
+ * the shipped `options.json` would silently stop contributing.
+ */
+export const OPTIONS_PATH = fileURLToPath(new URL("../../../options.json", import.meta.url))
 
 /** The plugin's id: the package name, and the label a message of its own is attributed to. */
 export const id = PLUGIN

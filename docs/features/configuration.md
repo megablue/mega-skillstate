@@ -26,8 +26,10 @@ touching the real home.
   `USER_CONFIG_FILENAME` / `USER_CONFIG_ENV`.
 - `src/adapters/opencode/config.ts` — `userConfigPath()` (this host's user directory,
   env-overridable), `ensureUserConfig()`.
-- `src/adapters/opencode/index.ts` — `OPTIONS_PATH` (`../../options.json` beside
-  `src/adapters/opencode/`); `setup` calls `userConfigPath()`, then
+- `src/adapters/opencode/index.ts` — `OPTIONS_PATH`
+  (`../../../options.json` at the package root, three levels above
+  `src/adapters/opencode/`), exported so the smoke can pin the depth; `setup`
+  calls `userConfigPath()`, then
   `ensureUserConfig()`, then `resolveConfig(resolveOptions(ctx.options, OPTIONS_PATH, userFile))`
   — the only call site.
 - `scripts/smoke.mjs` — the `user config` / `config layers` rows: the redirected
@@ -56,6 +58,12 @@ touching the real home.
   (files missing, changed, extra) rather than leaving you to deduce it. The user-level file
   outranks the installed copy, which is the point: it is per-user, never committed, and
   survives an install.
+- **The depth trap.** `OPTIONS_PATH` is depth-relative to the module that
+  resolves it. The core extraction moved `index.ts` two directories deeper and
+  pointed it at `src/options.json` — a file that does not exist — and nothing
+  complained: a missing layer is not an error, and the shipped `options.json`
+  equals the defaults, so the merge was behaviour-neutral. The smoke now pins
+  the depth, because the layer goes wrong the moment someone trims the file.
 - **Why a failed write warns and never throws.** The file is a convenience — the
   layers fall through to the defaults without it. A *missing* file is not an
   error; a *malformed* one is, like every other configuration mistake.
@@ -82,7 +90,9 @@ host's plugin entry.
 `DEFAULT_CONFIG`, and a second setup never rewrites it. The **config layers** row:
 `keepRecentTurns: 2` in the user file beats `options.json`'s 4 (payload 8), the
 host entry's 5 beats the user file's 2 (payload 17), and a malformed file is
-rejected with `/is not JSON/`.
+rejected with `/is not JSON/`. The **options path** row: `OPTIONS_PATH` resolves
+to a file that exists, and `resolveOptions` reads its keys — the pin for a wrong
+depth, where a missing file is silently nothing.
 
 ## Related
 

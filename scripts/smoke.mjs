@@ -967,8 +967,27 @@ console.log("")
   )
   rmSync(dir, { recursive: true, force: true })
 
+  // (e) The shipped-options path resolves to a file that exists, and the layer it
+  // names is actually read. A wrong depth reads a missing file, and the merge
+  // treats a missing layer as nothing at all, so the shipped `options.json`
+  // would silently stop contributing. That is the defect the core extraction
+  // carried through the move undetected — the shipped values equal the defaults,
+  // and no row read the layer. This row is the pin that closes it.
+  const adapter = await load("src/adapters/opencode/index.ts")
+  assert.ok(
+    existsSync(adapter.OPTIONS_PATH),
+    "OPTIONS_PATH must point at a file that exists, got " + adapter.OPTIONS_PATH,
+  )
+  const shipped = config.resolveOptions({}, adapter.OPTIONS_PATH, undefined)
+  assert.equal(
+    shipped.keepRecentTurns,
+    4,
+    "the shipped options.json layer is read, got " + JSON.stringify(shipped),
+  )
+
   row("user config", "written with the defaults when absent, never rewritten")
   row("config layers", "options.json < user file < host entry (window 2, then 5)")
+  row("options path", "the shipped layer resolves, exists, and is read")
 }
 
 // ---------------------------------------------------------------------------

@@ -45,17 +45,26 @@ the feature docs are the map, the mechanism and the traps.
   audience to read another's detail.
   - `server.ts` — the host entry. The loader resolves `<plugin-root>/server`
     before `<plugin-root>/index` (`.ts` before `.js`), so a directory install
-    needs only this one re-export.
-  - `src/index.ts` — `setup()`: registers the `context` hook, the `skill_state`
-    tool and the `/skillstate` command, and returns the disposer.
-  - `src/context.ts` — the transform: inject Σ, collapse the superseded prefix,
-    seed, nudge. The heart of the plugin.
-  - `src/state.ts`, `src/schema.ts` — the per-session Σ store, and the schema
-    plus the `⊕` merge (a `null` value deletes a key; unknown keys are dropped).
-  - `src/view.ts` — safe-cut helpers (turn numbering, tool-call/result pairing
-    balance) ported from the live reference plugin; the pairing arithmetic is
-    not reinvented here.
-  - `scripts/smoke.mjs` — the pinning test for the hard rules below.
+    needs only this one re-export; it points at the adapter, not the core.
+  - `src/core/` — the host-free core: `schema.ts` (the schema plus the `⊕`
+    merge — a `null` value deletes a key; unknown keys are dropped),
+    `state.ts` (the per-session Σ store), `seed.ts` (the deterministic seed),
+    `view.ts` (safe-cut helpers — turn numbering, tool-call/result pairing
+    balance — ported from the live reference plugin; the pairing arithmetic is
+    not reinvented here), `prompts.ts`, `compaction.ts`, `config.ts`,
+    `types.ts` (the message vocabulary), and `ports.ts` (the six port
+    interfaces a host adapter implements). **No host import lives in here.**
+  - `src/adapters/opencode/` — the OpenCode adapter, the half that knows about
+    the host: `index.ts` (`setup()`: registers the `context` and `compaction`
+    hooks, the `skill_state` tool and the `/skillstate` command, and returns
+    the disposer), `context.ts` (the transform — inject Σ, collapse the
+    superseded prefix, seed, nudge; the heart of the plugin), `tool.ts`,
+    `command.ts`, `types.ts` (the hand-written host mirror), `config.ts` (the
+    host-shaped user-config path). The layering rule: the core never imports
+    an adapter, and an adapter imports the core freely.
+  - `scripts/smoke.mjs` — the pinning test for the hard rules below;
+    `fixtures/golden.json` (captured by `scripts/capture-golden.mjs`) is the
+    byte-for-byte payload baseline its golden replay section reads.
 - `docs/arXiv-2608.26263v2/` — the source paper (LaTeX) the approach is
   derived from. **Read-only reference.** This repo implements the paper's
   context-window idea; it does not re-verify the paper.
@@ -156,12 +165,12 @@ across features; the feature pages keep the maps, mechanisms and traps.
   assertion — running the transform twice yields the identical payload.
 - **Never split a tool call from its result, and never inject while a call is open
   at the tail.** Collapse happens only at safe turn boundaries from `balanceCuts`
-  (`src/view.ts`); a state or notice message is appended only when `inFlight === 0`.
+  (`src/core/view.ts`); a state or notice message is appended only when `inFlight === 0`.
   *Reason:* the host must pair every `tool-call` with its `tool-result`; a cut or
   insert between them makes the host invent a result and the model then see two
   answers for one call. *Pinned by:* the smoke assertion that no call/result pair is
   split.
-- **The runtime owns the schema, not the model.** The `⊕` merge (`src/schema.ts`)
+- **The runtime owns the schema, not the model.** The `⊕` merge (`src/core/schema.ts`)
   deletes a key when the patch sets it to `null`, drops keys not in the schema, and
   replaces arrays wholesale. *Reason:* the paper's failure modes are the model
   dropping or overwriting existing keys; schema ownership in the deterministic

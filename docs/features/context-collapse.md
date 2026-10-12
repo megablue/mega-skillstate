@@ -14,10 +14,11 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 
 ## Map
 
-- `src/context.ts` — `runContextTransform` (async), `applyTransform` (async), `describeContext` (async), `measureContext`, `roughTokens`, `estimateTokens`, `windowOf`, `messageOf`, `SessionContextEventLike`, `ToolWireEntry` (the name arrives here, so no import cycle with `tool.ts`); types `TransformDeps` (now carries `storage`), the pass report.
-- `src/view.ts` — ported safe-cut helpers: `viewOf`, `turnMap`, `turnsOf`, `balanceCuts`, `selectPrunableRange`, `firstSelectableIndex`; injected-id helpers `INJECTED_ID_PREFIX` (`mega_`), `isInjectedMessage`, `STATE_MESSAGE_ID`, `valueText`.
-- `src/prompts.ts` — `SECTION_TEXT` (standing policy), `nudgeText`, `stateMessageText`.
-- `src/index.ts` — registers the hook inside `try/catch`; wires `windows` (model windows), the bounded `lastRequest` map, and `ctx.storage` into the transform's deps.
+- `src/adapters/opencode/context.ts` — `runContextTransform` (async), `applyTransform` (async), `describeContext` (async), `measureContext`, `roughTokens`, `estimateTokens`, `windowOf`, `SessionContextEventLike`, `ToolWireEntry` (the name arrives here, so no import cycle with `tool.ts`); types `TransformDeps` (now carries `storage`), the pass report.
+- `src/core/view.ts` — ported safe-cut helpers: `viewOf`, `turnMap`, `turnsOf`, `balanceCuts`, `selectPrunableRange`, `firstSelectableIndex`; injected-id helpers `INJECTED_ID_PREFIX` (`mega_`), `isInjectedMessage`, `STATE_MESSAGE_ID`, `valueText`.
+- `src/core/prompts.ts` — `SECTION_TEXT` (standing policy), `nudgeText`, `stateMessageText`.
+- `src/adapters/opencode/index.ts` — registers the hook inside `try/catch`; wires `windows` (model windows), the bounded `lastRequest` map, and `ctx.storage` into the transform's deps.
+- `src/core/types.ts` — the message vocabulary the transform reads, plus `messageOf`.
 
 ## How & why
 

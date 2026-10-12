@@ -20,14 +20,16 @@ touching the real home.
 
 ## Map
 
-- `src/config.ts` — `DEFAULT_CONFIG` (the 12 keys), `userConfigPath()`,
-  `ensureUserConfig()`, `readJsonFile()`, `objectLayer()`,
+- `src/core/config.ts` — `DEFAULT_CONFIG` (the 12 keys), `readJsonFile()`, `objectLayer()`,
   `resolveOptions(hostOptions, optionsFile?, userFile?)` (the layered merge),
-  `resolveConfig` (strict, per-key fallback to the default), `resolveThresholds`.
-- `src/index.ts` — `OPTIONS_PATH` (`../options.json` beside `src/`); `setup` calls
-  `userConfigPath()`, then `ensureUserConfig()`, then
-  `resolveConfig(resolveOptions(ctx.options, OPTIONS_PATH, userFile))` — the only
-  call site.
+  `resolveConfig` (strict, per-key fallback to the default), `resolveThresholds`,
+  `USER_CONFIG_FILENAME` / `USER_CONFIG_ENV`.
+- `src/adapters/opencode/config.ts` — `userConfigPath()` (this host's user directory,
+  env-overridable), `ensureUserConfig()`.
+- `src/adapters/opencode/index.ts` — `OPTIONS_PATH` (`../../options.json` beside
+  `src/adapters/opencode/`); `setup` calls `userConfigPath()`, then
+  `ensureUserConfig()`, then `resolveConfig(resolveOptions(ctx.options, OPTIONS_PATH, userFile))`
+  — the only call site.
 - `scripts/smoke.mjs` — the `user config` / `config layers` rows: the redirected
   `MEGA_SKILLSTATE_CONFIG` scratch file, the defaults written, the
   never-rewrite proof, the ladder order, the malformed-file refusal.

@@ -7,4 +7,4 @@
  * @module server
  */
 
-export { default } from "./src/index.ts"
+export { default } from "./src/adapters/opencode/index.ts"

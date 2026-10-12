@@ -27,9 +27,10 @@ import { fileURLToPath } from "node:url"
 
 import { createSkillStateCommand, type SkillStateCommandOptions } from "./command.ts"
 import { PLUGIN, ensureUserConfig, resolveConfig, resolveOptions, userConfigPath } from "./config.ts"
-import { runCompaction } from "./compaction.ts"
-import { messageOf, runContextTransform, type TransformDeps } from "./context.ts"
-import { MAX_SESSIONS } from "./state.ts"
+import { runCompaction } from "../../core/compaction.ts"
+import { runContextTransform, type TransformDeps } from "./context.ts"
+import { messageOf } from "./types.ts"
+import { MAX_SESSIONS } from "../../core/state.ts"
 import { TOOL_NAME, createSkillState } from "./tool.ts"
 import type {
   LastRequest,
@@ -40,8 +41,8 @@ import type {
   SystemPart,
 } from "./types.ts"
 
-/** Where an installed copy keeps its own options: the package root, one level above `src/`. */
-const OPTIONS_PATH = fileURLToPath(new URL("../options.json", import.meta.url))
+/** Where an installed copy keeps its own options: the package root, two levels above `src/adapters/opencode/`. */
+const OPTIONS_PATH = fileURLToPath(new URL("../../options.json", import.meta.url))
 
 /** The plugin's id: the package name, and the label a message of its own is attributed to. */
 export const id = PLUGIN

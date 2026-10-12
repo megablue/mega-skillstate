@@ -28,7 +28,7 @@
  */
 
 import type { ResolvedConfig } from "./config.ts"
-import { messageOf } from "./context.ts"
+import { messageOf } from "./types.ts"
 import { stateMessageText } from "./prompts.ts"
 import { seedHintsFromMessages, type SeedHints } from "./seed.ts"
 import { isPlainObject, type Sigma } from "./schema.ts"

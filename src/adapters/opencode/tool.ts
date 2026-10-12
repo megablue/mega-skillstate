@@ -16,10 +16,10 @@
  * @module mega-skillstate/tool
  */
 
-import { ackText, toolDescription } from "./prompts.ts"
-import { isPlainObject, render, STATE_KEYS, unknownKeys } from "./schema.ts"
 import { estimateTokens } from "./context.ts"
-import { stateStore } from "./state.ts"
+import { ackText, toolDescription } from "../../core/prompts.ts"
+import { isPlainObject, render, STATE_KEYS, unknownKeys } from "../../core/schema.ts"
+import { stateStore } from "../../core/state.ts"
 import type { StorageDomain, ToolCallContext, ToolDefinition, ToolResult } from "./types.ts"
 
 /** The tool's name, which is also what the standing policy tells the model to call. */

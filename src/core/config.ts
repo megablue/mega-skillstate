@@ -9,14 +9,21 @@
  * @module mega-skillstate/config
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { basename, dirname, join } from "node:path"
-import { homedir } from "node:os"
+import { existsSync, readFileSync } from "node:fs"
+import { basename } from "node:path"
 
 /** Package name; it is the plugin's id, and the label every message of its own is attributed to. */
 export const PLUGIN = "mega-skillstate"
 
-/** The user-level config file's name, inside the host's own user configuration directory. */
+/**
+ * The user-level config file's name, and the environment variable that points it
+ * somewhere else.
+ *
+ * Both are plugin policy rather than host policy — they are what a user is told
+ * to edit, whatever host the plugin runs under — so they live here beside the
+ * defaults. Where the file *sits* (this host's own user configuration directory)
+ * is the adapter's business: see `src/adapters/opencode/config.ts`.
+ */
 export const USER_CONFIG_FILENAME = "mega-skillstate.json"
 
 /** The environment variable that points the user-level config file somewhere else. */
@@ -139,41 +146,6 @@ function keys(object: unknown, allowed: Set<string>, label: string): Record<stri
     }
   }
   return object as Record<string, unknown>
-}
-
-/**
- * The user-level config file: the host's own user directory, one plugin-named file in it.
- *
- * The directory is the one this host keeps its user configuration in — the same one
- * `opencode.json` and the other per-plugin files live in — so the file sits where a
- * user already looks for settings. The environment override exists for tests, which
- * must never write to a real home, and for a user who wants the file somewhere else
- * entirely.
- */
-export function userConfigPath(): string {
-  const override = process.env[USER_CONFIG_ENV]
-  if (typeof override === "string" && override.length > 0) return override
-  return join(homedir(), ".config", "opencode", USER_CONFIG_FILENAME)
-}
-
-/**
- * The user-level config file, written with every default when it does not exist yet.
- *
- * A user who has never seen one has nothing to edit it from, so a first run writes the
- * defaults there, pretty-printed — and never again: a file that exists is the user's
- * own, edits included, and is left exactly as it is. A write that fails is the
- * caller's to report; this function throws rather than swallowing it.
- *
- * @param userFile - the file to write; defaults to `userConfigPath()`.
- * @returns whether the file was created (`false` when it already existed).
- * @throws when the directory or the file cannot be written.
- */
-export function ensureUserConfig(userFile?: string): boolean {
-  const file = userFile ?? userConfigPath()
-  if (existsSync(file)) return false
-  mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", "utf8")
-  return true
 }
 
 /** Read a JSON config file; a missing one is nothing at all, a malformed one is an error. */

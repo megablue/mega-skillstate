@@ -21,17 +21,20 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 
 ## Map
 
-- `src/tool.ts` — `TOOL_NAME = "skill_state"`, `TOOL_INPUT`, `createSkillState({ storage })`,
+- `src/adapters/opencode/tool.ts` — `TOOL_NAME = "skill_state"`, `TOOL_INPUT`, `createSkillState({ storage })`,
   `sessionIdOf`, `textResult`, `parsePatch`/`unfence`/`describe` (the tolerant read of
   `state_patch`); the `execute` runs the ⊕ patch, handles `Σ.step`, persists through the
   store, and returns the text ack.
-- `src/command.ts` — `createSkillStateCommand`, `stateReport`, `COMMAND_NAME`;
+- `src/adapters/opencode/command.ts` — `createSkillStateCommand`, `stateReport`, `COMMAND_NAME`;
   `/skillstate` and `/skillstate now` (a forced, awaited pass).
-- `src/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
+- `src/core/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
   `toolDescription`, `schemaText`, `ackText` (the ack format).
-- `src/config.ts` — `resolveOptions` (reads `options.json` and `ctx.options`), `resolveConfig`
+- `src/core/config.ts` — `resolveOptions` (reads `options.json` and `ctx.options`), `resolveConfig`
   (strict: unknown keys throw), `resolveThresholds`, `DEFAULT_CONFIG`.
-- `src/index.ts` — registers the tool **and** the command; wires the `payloads` map and
+- `src/adapters/opencode/config.ts` — `userConfigPath()`, `ensureUserConfig()`,
+  `USER_CONFIG_FILENAME`, `USER_CONFIG_ENV` — the host-shaped half (where the user-level file
+  sits); the rest of the config machinery is `src/core/config.ts`.
+- `src/adapters/opencode/index.ts` — registers the tool **and** the command; wires the `payloads` map and
   `ctx.storage` into both, so a `/skillstate now` pass is durable too.
 - `scripts/install.ts` — the installer: `parseArgs`, `packageRoot`, `userPluginDir`,
   `projectPluginDir`, `discoveryDirs`, `isLink`, `installInto`, `uninstallFrom`, `run`,

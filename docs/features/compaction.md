@@ -19,14 +19,14 @@ User-visible behavior: `docs/SPEC.md` → Compaction. The design contract is `DE
 
 ## Map
 
-- `src/compaction.ts` — `runCompaction(deps, event)`, `distill(deps, { sessionID, messages })`,
+- `src/core/compaction.ts` — `runCompaction(deps, event)`, `distill(deps, { sessionID, messages })`,
   `hasMeaningfulState` (the `MEANINGFUL` gate: `objective plan done findings files decisions open`),
   `seedPatch`; `CompactionDeps`, `CompactionReport`.
-- `src/state.ts` — `stateStore` (durable; a cache miss is one `storage.get`), `seed`.
-- `src/seed.ts` — `seedHintsFromMessages` (whole-transcript sweep) / `seedHints` (window).
-- `src/prompts.ts` — `stateMessageText(state, collapsed)` — the same bytes the collapse injects.
-- `src/index.ts` — registers `ctx.session.hook("compaction", …)` and disposes it with the rest.
-- `src/types.ts` — `CompactionEvent` (`result?: { summary: string }`), `StorageDomain`.
+- `src/core/state.ts` — `stateStore` (durable; a cache miss is one `storage.get`), `seed`.
+- `src/core/seed.ts` — `seedHintsFromMessages` (whole-transcript sweep) / `seedHints` (window).
+- `src/core/prompts.ts` — `stateMessageText(state, collapsed)` — the same bytes the collapse injects.
+- `src/adapters/opencode/index.ts` — registers `ctx.session.hook("compaction", …)` and disposes it with the rest.
+- `src/core/types.ts` — `CompactionEvent` (`result?: { summary: string }`), `StorageDomain`.
 
 ## How & why
 

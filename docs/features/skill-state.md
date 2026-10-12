@@ -17,18 +17,19 @@ User-visible behavior: `docs/SPEC.md` → Scope, Compaction. The state is the su
 
 ## Map
 
-- `src/schema.ts` — `STATE_FIELDS` / `StateField` (the contract), `merge`
+- `src/core/schema.ts` — `STATE_FIELDS` / `StateField` (the contract), `merge`
   (⊕; recursive dict merge + null-delete), `validateKeys`, `unknownKeys`, `changedKeys`,
   `fingerprint`, `render` / `orderedValue` (canonical order).
-- `src/state.ts` — `stateStore(sessionID, { storage, log })` (async: a cache **miss**
+- `src/core/state.ts` — `stateStore(sessionID, { storage, log })` (async: a cache **miss**
   does one `storage.get`, a hit is served from memory), `stateKey`, `PersistedState`
   (`{ state, collapsed, summary }`), `MAX_SESSIONS = 64`, `resetStateStore` / `forgetSession`
   / `stateOf` / `stateCount`, per-session record: `apply`, `set`, `seed` (holes only), `step`
   (reads `Σ.step`), `setCollapsed` / `collapsed`, `setSummary`, `observeUser`, `hydrated`,
   turn memory `turnOf` / `assignTurn` / `highestTurn`.
-- `src/seed.ts` — `seedHintsFromMessages` (the scan), `seedHints` (the transform's window
+- `src/core/seed.ts` — `seedHintsFromMessages` (the scan), `seedHints` (the transform's window
   slice), `EMPTY_HINTS`, `SeedHints`; tracks only `trackTools` calls and `glob`-style results.
-- `src/view.ts` — `valueText`, injected-id helpers (shared with the collapse pass).
+- `src/core/view.ts` — `valueText`, injected-id helpers (shared with the collapse pass).
+- `src/core/types.ts` — `StorageDomain` (the port alias for `ports.Storage`), `CollapsedSpan`, `LastRequest`.
 
 ## How & why
 

@@ -265,7 +265,7 @@ assert.ok(host.context.storage, "the host's storage seam is wired into the plugi
 console.log("registered: 1 context hook, 1 compaction hook, 1 tool (skill_state), 1 command (/skillstate)\n")
 
 /** The store module, so the restart test can drop the in-memory tier and keep the rest. */
-const state = await load("src/state.ts")
+const state = await load("src/core/state.ts")
 
 // ---------------------------------------------------------------------------
 // The transform.
@@ -354,7 +354,7 @@ console.log("")
 // ---------------------------------------------------------------------------
 // ⊕: the merge operator.
 // ---------------------------------------------------------------------------
-const schema = await load("src/schema.ts")
+const schema = await load("src/core/schema.ts")
 const deleted = schema.merge({ objective: "ship the plugin", done: ["one", "two"] }, { done: null })
 assert.deepEqual(deleted, { objective: "ship the plugin" }, "a null deletes the key")
 
@@ -918,7 +918,7 @@ console.log("")
 // with the `scratchHome` cleanup at the end of this file.
 // ---------------------------------------------------------------------------
 {
-  const config = await load("src/config.ts")
+  const config = await load("src/core/config.ts")
   const dir = mkdtempSync(join(tmpdir(), "mega-skillstate-config-"))
   const userFile = join(dir, "mega-skillstate.json")
   process.env.MEGA_SKILLSTATE_CONFIG = userFile

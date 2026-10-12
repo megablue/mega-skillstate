@@ -27,10 +27,11 @@
  * @module mega-skillstate/context
  */
 
-import { resolveThresholds, type ResolvedConfig } from "./config.ts"
-import { nudgeText, SECTION_TEXT, stateMessageText } from "./prompts.ts"
-import { EMPTY_HINTS, seedHints, type SeedHints } from "./seed.ts"
-import { stateStore, type StateRecord } from "./state.ts"
+import { resolveThresholds, type ResolvedConfig } from "../../core/config.ts"
+import { nudgeText, SECTION_TEXT, stateMessageText } from "../../core/prompts.ts"
+import { EMPTY_HINTS, seedHints, type SeedHints } from "../../core/seed.ts"
+import { stateStore, type StateRecord } from "../../core/state.ts"
+import { messageOf } from "./types.ts"
 import type { CollapsedSpan, Message, StorageDomain, SystemPart } from "./types.ts"
 import {
   balanceCuts,
@@ -44,7 +45,7 @@ import {
   type PrunableRange,
   type TurnInfo,
   type ViewNode,
-} from "./view.ts"
+} from "../../core/view.ts"
 
 /** What the transform is allowed to reach outside itself. */
 export interface TransformDeps {
@@ -123,11 +124,6 @@ export interface ContextDescriptor {
   readonly collapsed: CollapsedSpan | undefined
   /** The range the collapse would replace now, or `null` when nothing may be replaced. */
   readonly range: PrunableRange | null
-}
-
-/** An error's message, without depending on it being an Error. */
-export function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /**

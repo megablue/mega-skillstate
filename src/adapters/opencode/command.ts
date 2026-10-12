@@ -23,8 +23,8 @@ import {
   type ContextDescriptor,
   type TransformDeps,
 } from "./context.ts"
-import { COMMAND_DESCRIPTION, turnSpan } from "./prompts.ts"
-import { render } from "./schema.ts"
+import { COMMAND_DESCRIPTION, turnSpan } from "../../core/prompts.ts"
+import { render } from "../../core/schema.ts"
 import { sessionIdOf } from "./tool.ts"
 import type { CommandDefinition, LastRequest } from "./types.ts"
 

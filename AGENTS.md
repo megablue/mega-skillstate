@@ -60,6 +60,9 @@ the feature docs are the map, the mechanism and the traps.
   derived from. **Read-only reference.** This repo implements the paper's
   context-window idea; it does not re-verify the paper.
 - `docs/features/` — the feature map (this workflow).
+- `docs/ROADMAP.md` — the forward-looking plan (portability phases, gates and
+  decisions). A plan, not a description of what the code does today; the feature
+  map remains the working documentation.
 - `HANDOFF.md` — volatile session state; refreshed at handover, allowed to lag
   the tip (its header says the code wins).
 

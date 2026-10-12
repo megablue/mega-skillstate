@@ -971,6 +971,122 @@ console.log("")
   row("config layers", "options.json < user file < host entry (window 2, then 5)")
 }
 
+// ---------------------------------------------------------------------------
+// The golden payloads: a byte-for-byte replay of the committed baseline.
+//
+// The rows above pin behavior by numbers and content, but a refactor can pass
+// every one of them while quietly reshaping the payload — the same text in a
+// different part shape, the same report under different keys. `fixtures/
+// golden.json` is the byte-level baseline: `scripts/capture-golden.mjs`
+// recorded it through this plugin's public surface — the host entry, a fake
+// host, the real `context` and command hooks — before any module moved, and
+// every case here is replayed through a fresh host and compared byte for byte.
+//
+// The file is test data and does not ship (`package.json` `files[]` is
+// unchanged), so a copy installed from this package still runs: the row says so
+// when the file is absent rather than failing. `npm run smoke` against the
+// repository pins it.
+// ---------------------------------------------------------------------------
+{
+  const goldenPath = join(root, "fixtures", "golden.json")
+  if (!existsSync(goldenPath)) {
+    row("golden payloads", "no fixtures/golden.json — run `node scripts/capture-golden.mjs .` to pin the baseline")
+  } else {
+    const golden = JSON.parse(readFileSync(goldenPath, "utf8"))
+    assert.equal(golden.schema, 1, "this smoke reads golden schema 1")
+
+    /** The same cut of the report the capture recorded, so the diff is byte-level. */
+    const cutReport = (report) => ({
+      tokensBefore: report.tokensBefore,
+      tokensAfter: report.tokensAfter,
+      window: report.window ?? null,
+      keepRecentTurns: report.keepRecentTurns,
+      turns: report.turns,
+      currentTurn: report.currentTurn,
+      stepsSinceUser: report.stepsSinceUser,
+      collapsed: report.collapsed ?? null,
+      nudged: report.nudged,
+      notes: [...report.notes],
+    })
+
+    /** The capture's storage modes, mapped onto this file's `createHost` vocabulary. */
+    const storageModeFor = (mode) => (mode === "none" ? false : mode === "broken" ? "broken" : true)
+
+    /** A `context` event carrying one case's own transcript and session id. */
+    const caseEvent = (transcript, sessionID) => ({
+      sessionID,
+      agent: "build",
+      model: MODEL,
+      system: [],
+      messages: transcript,
+      tools: {},
+    })
+
+    // A scratch user-config path, so the cases run against the real layered
+    // config exactly as the capture did: the defaults, the user file the first
+    // setup writes, and the case's own host options on top.
+    const goldenScratch = mkdtempSync(join(tmpdir(), "mega-skillstate-golden-"))
+    process.env.MEGA_SKILLSTATE_CONFIG = join(goldenScratch, "mega-skillstate.json")
+
+    let replayed = 0
+    try {
+      for (const goldenCase of golden.cases) {
+        const label = "golden: " + goldenCase.name
+        const made = createHost({ storage: storageModeFor(goldenCase.storage) })
+        made.context.options = goldenCase.options
+        const caseDispose = await plugin.default.setup(made.context)
+        const event = caseEvent(goldenCase.transcript, goldenCase.sessionID ?? undefined)
+
+        // A host that refuses every store call must *report* it: the capture
+        // recorded the lines, so the replay proves the same lines come back.
+        const logged = []
+        const realError = console.error
+        if (goldenCase.storage === "broken") console.error = (line) => logged.push(String(line))
+        let report
+        try {
+          const hook = made.contextHooks[0]
+          for (let pass = 0; pass < goldenCase.passes; pass += 1) {
+            report = await hook(event)
+          }
+          if (goldenCase.kind === "command") {
+            await made.commands[0].execute({ sessionID: goldenCase.sessionID, prompt: { text: goldenCase.prompt ?? "now" } })
+          }
+        } finally {
+          console.error = realError
+          await caseDispose().catch(() => {})
+        }
+
+        checkPairing(event.messages, label)
+        const cut = cutReport(report)
+        const asJson = (value) => JSON.stringify(value)
+        assert.equal(asJson(event.messages), asJson(goldenCase.expect.messages), label + ": the outbound messages must be byte-identical")
+        assert.equal(asJson(event.system), asJson(goldenCase.expect.system), label + ": the system parts must be byte-identical")
+        assert.equal(
+          asJson(Object.keys(event.tools).sort()),
+          asJson(goldenCase.expect.tools),
+          label + ": the offered wire tools must be byte-identical",
+        )
+        assert.equal(asJson(cut), asJson(goldenCase.expect.report), label + ": the report must be byte-identical")
+        if (goldenCase.expect.logged !== undefined) {
+          assert.equal(asJson(logged), asJson(goldenCase.expect.logged), label + ": the degraded host's log lines must be byte-identical")
+        }
+        if (goldenCase.kind === "command") {
+          const reply = made.prompts[made.prompts.length - 1].text
+          assert.equal(asJson(reply), asJson(goldenCase.expect.reply), label + ": the command reply must be byte-identical")
+        }
+        replayed += 1
+        // One host, one store, one session per case: the in-memory tier is
+        // dropped between cases so the replay cannot leak state across them.
+        state.resetStateStore()
+        row(label, goldenCase.expect.messages.length + " message(s), " + cut.tokensAfter + " tokens, byte-identical")
+      }
+    } finally {
+      rmSync(goldenScratch, { recursive: true, force: true })
+    }
+    row("golden payloads", replayed + " case(s) replayed byte-for-byte from fixtures/golden.json")
+  }
+}
+
 await dispose().catch(() => {})
 rmSync(scratchHome, { recursive: true, force: true })
 console.log("\nsmoke: ok")

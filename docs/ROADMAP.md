@@ -108,6 +108,86 @@ method; adapters translate decisions, they do not implement features.
 - **Gate:** core conformance suite passes on Pi; manual session shows collapse
   + Σ restore across resume.
 
+**Design** (verified against `pi/packages/coding-agent/src/core/extensions/
+types.ts`, read in full — 2328 lines, 2026-10-13; nothing below is assumed):
+
+**Entry.** A Pi package is an `ExtensionFactory`
+(`export const activate: ExtensionFactory = async (pi) => {…}`), sync or async
+init, and jiti loads the TypeScript directly — no build step. So the adapter's
+entry is a factory, not `setup(ctx)` + a disposable: `registerTool` and
+`registerCommand` both return `void` (no registration handle to keep, unlike
+OpenCode's `Registration`), and every `on(event, handler)` returns the
+unsubscribe `() => void`, which is the only lifetime the factory holds.
+
+**Core reuse, unchanged.** `schema.ts` (⊕ merge, render, key accounting),
+`seed.ts`, `view.ts` — Pi's own part vocabulary (text / reasoning / tool-call /
+tool-result) *is* the core vocabulary, so `Codec` is identity — `prompts.ts`,
+`state.ts` (`StoreDeps.storage` is already the Storage *port*, so the Pi adapter
+passes its own implementation and `core/state.ts` is untouched), `compaction.ts`
+(the duck-typed `CompactionEvent {sessionID, messages, result?}`), and
+`config.ts` (`resolveConfig`/`resolveThresholds` are host-free; only the
+*source* differs — Pi reads `pi.getSettings()` where OpenCode reads
+`options.json` + the user file).
+
+**The six ports → Pi seams** (each row is the port, the Pi seam, and what it
+replaces from adapter #0):
+
+1. `CollapseStrategy` → `pi.on("context")`. The handler rewrites **by return** —
+   `ContextEventResult = { messages?: AgentMessage[] }` — or mutates in place;
+   Pi restores prompt/tool state after the handler. Replace OpenCode's
+   `event.messages` splice, same arithmetic from `view.ts`.
+2. `Codec` → identity. The only work is strip/restore of the injected `mega_`
+   ids, which `view.ts` already owns.
+3. `Storage` → `pi.appendEntry("mega_state", {state, collapsed, summary})` as
+   the durable write (fire-and-forget — the port's `set()` is void-compatible),
+   reconstructed from `sessionManager.getBranch()` on `session_start`:
+   branch-aware and resume-safe, so Pi never uses the KV blob at all. This is
+   the one port where Pi is *better* than adapter #0, not just different.
+4. `ToolBridge` → `pi.registerTool(ToolDefinition)`. Pi's definition carries
+   name, description, `parameters` (the TypeBox schema), `promptGuidelines`,
+   `reachesTools`, `exposure`, `annotations`, plus `execute`.
+5. `CommandBridge` → `pi.registerCommand(name, {handler(args, ctx)})` plus a
+   reply channel. Note `args` is a **string** in Pi, unlike OpenCode's
+   invocation object. Reply via `ctx.ui.notify` (unverified — see below), with
+   `sendMessage({…, triggerTurn: false})` as the fallback (`sendUserMessage`
+   always triggers a turn, so it is *not* the channel).
+6. `SessionLifecycle` → the context event's session id; init/dispose from
+   `session_start` / `session_shutdown`. The factory itself holds no resources.
+
+**Policy, compaction, nudge.** Standing policy rides
+`pi.on("before_agent_start")`, mutating the `systemPromptOptions` sections
+(OpenCode pushes into `event.system`). Compaction rides
+`pi.on("session_before_compact")` → `{cancel: true, compaction: …}`, so no
+summarizer call runs at all (OpenCode sets `event.result`). The stale nudge
+rides the same `context` message array at a balanced tail — `view.ts`'s
+arithmetic is reused verbatim.
+
+**The glue split Pi forces.** This is the deferred Phase-1 split, and Pi is the
+second adapter that makes it necessary rather than speculative:
+
+- (a) the pure half of `adapters/opencode/context.ts` moves to
+  `core/context.ts`, and `runContextTransform` takes an already-resolved
+  `{system, tools, sessionID, model, messages}` and **returns** the tool
+  wire-offer `{name, description, input}`; the one host-coupled line —
+  assigning into the host's tool map — becomes each adapter's own.
+- (b) `core/skill-state.ts` = `TOOL_NAME`, `TOOL_INPUT`, `parsePatch`,
+  `unfence`, `describe`, `sessionIdOf`, `textResult` and the write semantics
+  (patch → step → persist → ack); `adapters/{opencode,pi}/tool.ts` keep only
+  their definition envelope (OpenCode's `codemode: false` options + output
+  schema; Pi's TypeBox `parameters` + `exposure`).
+- (c) `core/skill-state-command.ts` = `COMMAND_NAME`, `stateReport`,
+  `turnIndex`, `stateBlock`; the adapters keep the envelope and the reply
+  channel.
+
+**Unverified before code** (recorded so no adapter is written against a
+remembered shape): `ui.notify`'s location — most likely `ExtensionContext`'s
+`ctx.ui`, not confirmed in the file read; `ToolDefinition`'s executable
+signature body (an earlier reading records TypeBox params and
+`execute(toolCallId, params, signal, onUpdate, ctx) → {content, details}`, but
+it was not re-confirmed in this pass); and the Pi **package manifest** shape —
+the install path is documented as "distributable as npm/git Pi packages", but
+the manifest fields are unread. Design is settled; these three gate the code.
+
 ### Phase 3 — Tier 2 proxy daemon (the chosen Tier 2 route)
 
 - [ ] Daemon skeleton: HTTP server, SSE streaming passthrough, auth passthrough;

@@ -9,15 +9,13 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-13`, the tip is `3108592` ("Name the byte-level baselines in
-the Tests section") — `git rev-parse HEAD` for the sha; this file does
-not name itself, because amending the fill-in would rewrite it again.
-`main` is **ahead of `origin/main` by 11**: `9a9b0d6` (Phase 2 design),
-`17d2c52` (the options-path fix), `6ba8823`, `fab51f0`, `f56216b`,
-`1d34a5a`, `2744efc`, `51adc29`, `8c9c322` (a HANDOFF refresh), `93eb25c`
-and `3108592` (the golden-pi follow-up, below, now closed) are all
-local-only. Phase 1 (`9a2be0a`) **is** pushed — the remote sits before
-`9a9b0d6`.
+As of `2026-10-13`, the tip is `7f23890` ("Regenerate the lock file for
+the five Pi peerDependencies") - `git rev-parse HEAD` for the sha; this file
+does not name itself, because amending the fill-in would rewrite it again.
+`main` is **level with `origin/main`** (ahead by 0). Every commit from
+`9a2be0a` (Phase 1) through `7f23890` (the lock fix) is on the remote, and
+the CI run for the tip (`38388970742`) went green on both runners. Nothing is
+local-only any more - push is not an open thread.
 
 ## State
 
@@ -116,9 +114,12 @@ local-only. Phase 1 (`9a2be0a`) **is** pushed — the remote sits before
   `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
   through `cutReport` throws, and comparing the raw return never matches.
   Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
-- **Push.** All 11 commits above. Everything through `51adc29` ran green on
-  both runners, but `8c9c322`, `93eb25c` and `3108592` have never been on
-  CI — they are local-only and unverified by the runners until pushed.
+- **Push — done.** All 13 commits above are pushed: `9a2be0a` (Phase 1)
+  through `7f23890` (the lock fix). The remote was at `9a2be0a` for most of
+  Phase 2, which is why the runs for those commits were green long after the
+  fact. The run for the first push of the batch (`38387263678`) was red at
+  `npm ci` — the lock file lagged the `1d34a5a` peerDependencies — and
+  `7f23890` fixed it, with run `38388970742` green on both runners.
 - **The CLI still runs pre-refactor code.** Both installed scopes —
   project `.opencode/plugin/mega-skillstate` and user
   `~/.config/opencode/plugins/mega-skillstate` — are Oct-9 snapshots of the
@@ -194,12 +195,13 @@ local-only. Phase 1 (`9a2be0a`) **is** pushed — the remote sits before
 
 ## Local-only state (not on the remote)
 
-- The remote exists: `github.com/megablue/mega-skillstate`, `main`, with a CI
-  workflow (`typecheck` + `smoke` on ubuntu and windows, node 22) and a
-  `FUNDING.yml`. The last push ran green on both runners, but the **11**
-  commits listed at the top are not on it — and the last three (`8c9c322`,
-  `93eb25c`, `3108592`) have never been on a runner at all, so they are
-  unverified by CI until the next push.
+- Nothing is local-only any more. Everything in the State section above is on
+  `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
+  `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`),
+  and the run for the tip (`38388970742`) is green on both runners. The one
+  red run (`38387263678`, named after a docs-only commit but actually the
+  `npm ci` EUSAGE on the lock file) was fixed by `7f23890` and is history, not
+  an open thread.
 - `~/.config/opencode/mega-skillstate.json` — the live user config; one entry
   beyond the defaults (`feature_map` in `trackTools`). A delete just gets it
   rewritten on the next load; the smoke redirects `MEGA_SKILLSTATE_CONFIG`

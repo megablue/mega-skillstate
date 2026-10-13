@@ -547,7 +547,7 @@ async function capturePiCommand(name, spec) {
   factory(made.pi)
   const event = piContextEvent(JSON.parse(JSON.stringify(spec.transcript)), spec.sessionID)
   const report = await made.events["context"][0](event)
-  await made.commands[0].definition.handler(spec.prompt ?? "now", made.makeCtx())
+  await made.commands[0].definition.handler(spec.prompt ?? "now", made.makeCtx({ sessionId: spec.sessionID }))
   const reply = made.notifications[made.notifications.length - 1].message
   row(name, "reply " + reply.length + " chars")
   return {

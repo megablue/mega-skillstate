@@ -1236,6 +1236,114 @@ console.log("")
     assert.equal(made.notifications.length, beforeGuard, "a host with no UI reads no reply")
 
     row("pi reply channel", "ctx.ui.notify reached for both arguments, guarded without a UI")
+
+    // --- The byte-level baseline: the same claim the OpenCode golden block makes. --
+    // The rows above pin behavior by numbers and content. A refactor can pass every
+    // one of them while quietly reshaping the payload — the same text in a different
+    // part shape, the same report under different keys — so `fixtures/golden-pi.json`
+    // is replayed case by case through a fresh host and compared byte for byte.
+    //
+    // Two things make this Pi's own baseline rather than a copy of OpenCode's. Pi's
+    // context event carries no `system` array and its token counts are message-only,
+    // so its numbers are not comparable to golden.json's; and the reply channel is
+    // `ctx.ui.notify`, not the prompt an OpenCode command writes. A divergence in
+    // either shows up here as drift, which is the point.
+    //
+    // The file is test data and does not ship, so a copy installed from this package
+    // still runs: the row says so when the file is absent rather than failing.
+    {
+      const goldenPiPath = join(root, "fixtures", "golden-pi.json")
+      if (!existsSync(goldenPiPath)) {
+        row("pi golden payloads", "no fixtures/golden-pi.json — run `node scripts/capture-golden.mjs . . --host pi` to pin the baseline")
+      } else {
+        const goldenPi = JSON.parse(readFileSync(goldenPiPath, "utf8"))
+        assert.equal(goldenPi.schema, 1, "this smoke reads golden-pi schema 1")
+
+        /** The same cut of the report the capture recorded, so the diff is byte-level. */
+        const cutReportPi = (report) => ({
+          tokensBefore: report.tokensBefore,
+          tokensAfter: report.tokensAfter,
+          window: report.window ?? null,
+          keepRecentTurns: report.keepRecentTurns,
+          turns: report.turns,
+          currentTurn: report.currentTurn,
+          stepsSinceUser: report.stepsSinceUser,
+          collapsed: report.collapsed ?? null,
+          nudged: report.nudged,
+          notes: [...report.notes],
+        })
+
+        // A payload with no session id is not a failed pass: the adapter's own guard
+        // leaves it exactly as the host built it and hands back the payload rather
+        // than a report. That shape carries no `notes` array, so it is compared as
+        // it was recorded rather than forced through the report cut above.
+        const expectIsGuard = (report) => Array.isArray(report?.notes) === false
+
+        let replayedPi = 0
+        try {
+          for (const goldenPiCase of goldenPi.cases) {
+            const label = "pi golden: " + goldenPiCase.name
+            // One host, one session, one store per case: the section's own `made`
+            // has already accumulated Σ and a collapsed payload, so reusing it
+            // would leak this session's state into every case that followed.
+            const madePi = createPiHost()
+            const piFactory = await loadPiFactory(load)
+            if (piFactory === undefined) throw new Error("src/adapters/pi/index.ts must default-export its factory")
+            piFactory(madePi.pi)
+            const event = piContextEvent(JSON.parse(JSON.stringify(goldenPiCase.transcript)), goldenPiCase.sessionID)
+
+            let report
+            for (let pass = 0; pass < goldenPiCase.passes; pass += 1) {
+              report = await madePi.events["context"][0](event)
+            }
+            if (goldenPiCase.kind === "pi-command") {
+              // The same session id the pass recorded, not the host's default: a
+              // command asked about a session the pass never saw is a real defect
+              // this fixture caught in the capture, not in the adapter.
+              await madePi.commands[0].definition.handler(goldenPiCase.prompt ?? "now", madePi.makeCtx({ sessionId: goldenPiCase.sessionID }))
+            }
+
+            checkPairing(event.messages, "the Pi golden payload of " + goldenPiCase.name)
+            const asJson = (value) => JSON.stringify(value)
+            assert.equal(
+              asJson(event.messages),
+              asJson(goldenPiCase.expect.messages),
+              label + ": the outbound messages must be byte-identical",
+            )
+            // A payload with no session id is not a failed pass: the adapter's guard
+            // leaves it exactly as the host built it and hands back the payload
+            // rather than a report, with no `notes` array to cut. So the replay
+            // derives the recorded shape exactly as the capture does — comparing the
+            // bytes only after both halves agree about *which* answer was given.
+            const guarded = !Array.isArray(report?.notes)
+            assert.equal(
+              guarded,
+              expectIsGuard(goldenPiCase.expect.report),
+              label + ": the guarded shape must agree with what the adapter returned",
+            )
+            const recordedReport = guarded
+              ? { kind: "no-session-guard", messages: event.messages.length }
+              : cutReportPi(report)
+            assert.equal(asJson(recordedReport), asJson(goldenPiCase.expect.report), label + ": the report must be byte-identical")
+            if (goldenPiCase.expect.reply !== undefined) {
+              const reply = madePi.notifications[madePi.notifications.length - 1].message
+              assert.equal(asJson(reply), asJson(goldenPiCase.expect.reply), label + ": the command reply must be byte-identical")
+            }
+            replayedPi += 1
+            state.resetStateStore()
+            row(
+              label,
+              goldenPiCase.expect.messages.length + " message(s), byte-identical to fixtures/golden-pi.json",
+            )
+          }
+        } finally {
+          // A scratch host's tool writes nothing durable that needs tearing down —
+          // the append log lives and dies with this case's `madePi` — but the store
+          // is reset per case above so the next one cannot inherit this session's Σ.
+        }
+        row("pi golden payloads", replayedPi + " case(s) replayed byte-for-byte from fixtures/golden-pi.json")
+      }
+    }
   } finally {
     if (previousConfig === undefined) delete process.env.MEGA_SKILLSTATE_CONFIG
     else process.env.MEGA_SKILLSTATE_CONFIG = previousConfig

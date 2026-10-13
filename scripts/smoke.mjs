@@ -28,6 +28,7 @@
  */
 
 import assert from "node:assert/strict"
+import { createServer } from "node:http"
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -1574,6 +1575,181 @@ console.log("")
     if (previousConfig === undefined) delete process.env.MEGA_SKILLSTATE_CONFIG
     else process.env.MEGA_SKILLSTATE_CONFIG = previousConfig
     rmSync(piScratch, { recursive: true, force: true })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The proxy daemon: a real listener, a fake upstream, and the things only a
+// boundary can prove.
+//
+// The daemon is the first module here with a process boundary, so it is pinned
+// against one: a real listener on an ephemeral port, and a fake upstream that
+// RECORDS what it was handed. The assertion that matters is on what the upstream
+// received, because an assertion on the daemon's own reply would be the daemon
+// grading its own homework.
+//
+// Four things are asserted, and each has failed somewhere else. The payload the
+// upstream saw was COLLAPSED - a rewrite that passes the original through looks
+// identical from the client's side, so only the upstream's copy shows it. The
+// caller's Authorization header arrives verbatim - a proxy that strips auth gets
+// a 401 from the provider and reports nothing useful. An SSE response arrives as
+// a stream rather than as one finished blob - the moment a response body is
+// buffered, a stream stops being a stream, so the first chunk is asserted to
+// arrive while the provider is still writing the second. And a non-JSON body is
+// forwarded untouched, because a watermark or a health check must not be
+// rewritten into something else.
+// ---------------------------------------------------------------------------
+{
+  const proxyModule = await load("src/proxy/server.ts")
+  const anthropicCodec = await load("src/proxy/codec-anthropic.ts")
+  const viewModule = await load("src/core/view.ts")
+  const coreConfig = await load("src/core/config.ts")
+  assert.equal(typeof proxyModule.createProxyServer, "function", "the daemon must export its factory")
+  assert.equal(typeof anthropicCodec.codec, "object", "and the codec it composes")
+
+  /** Anthropic's wire shape: a head instruction, then `turns` paired turns. */
+  const anthropicTranscript = (turns) => {
+    const messages = [{ role: "user", content: [{ type: "text", text: filler("the assignment", 900) }] }]
+    for (let turn = 1; turn <= turns; turn += 1) {
+      messages.push({ role: "user", content: [{ type: "text", text: filler("turn " + turn + " instruction", 220) }] })
+      messages.push({
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: filler("reasoning for turn " + turn, 320), signature: "sig-" + turn },
+          { type: "tool_use", id: "toolu_" + turn, name: "read", input: { file_path: "src/file" + turn + ".ts" } },
+        ],
+      })
+      messages.push({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "toolu_" + turn, content: filler("result of turn " + turn, 2400) }],
+      })
+    }
+    return messages
+  }
+
+  // Checked before anything is forwarded. A hand-written transcript carrying an
+  // orphan result fails here, where it is a fixture bug, rather than inside the
+  // daemon, where it would look like a codec bug.
+  const wire = anthropicTranscript(20)
+  checkPairing(anthropicCodec.decode(wire), "the anthropic wire transcript")
+
+  /** The last request the upstream was handed; null until one arrives. */
+  let lastUpstream = null
+  const upstream = createServer((request, response) => {
+    const chunks = []
+    request.on("data", (chunk) => chunks.push(chunk))
+    request.on("end", () => {
+      lastUpstream = {
+        method: request.method,
+        url: request.url,
+        headers: { ...request.headers },
+        body: Buffer.concat(chunks).toString("utf8"),
+      }
+      if (request.url === "/v1/stream") {
+        // No content-length, exactly as a provider sends a stream, and the
+        // second chunk lands well after the first.
+        response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" })
+        response.write("data: {\"type\":\"message_start\"}\n\n")
+        setTimeout(() => {
+          response.write("data: {\"type\":\"content_block_delta\"}\n\n")
+          response.end("data: {\"type\":\"message_stop\"}\n\n")
+        }, 500)
+        return
+      }
+      response.writeHead(200, { "content-type": "application/json" })
+      response.end(JSON.stringify({ id: "msg_proxy", role: "assistant", content: [{ type: "text", text: "proxied" }] }))
+    })
+  })
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve))
+  const upstreamPort = upstream.address().port
+
+  const daemon = proxyModule.createProxyServer({
+    port: 0,
+    upstream: "http://127.0.0.1:" + upstreamPort,
+    codec: anthropicCodec.codec,
+    config: coreConfig.resolveConfig(OPTIONS),
+    fallbackSession: "proxy-shared",
+    log: (line) => row("proxy daemon log", line),
+  })
+  await new Promise((resolve) => daemon.listen(0, "127.0.0.1", resolve))
+  const daemonPort = daemon.address().port
+  const through = (path, body, headers = {}) =>
+    fetch("http://127.0.0.1:" + daemonPort + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+    })
+
+  try {
+    // --- The outbound payload is rewritten, not merely forwarded. -------------
+    const replied = await through(
+      "/v1/messages",
+      JSON.stringify({ model: "claude-test", system: [{ type: "text", text: "policy" }], messages: wire }),
+      { authorization: "Bearer proxy-token-123" },
+    )
+    assert.equal(replied.status, 200, "the provider's answer comes back through")
+    assert.equal((await replied.json()).id, "msg_proxy", "and it is the provider's own body")
+
+    assert.ok(lastUpstream !== null, "the upstream was reached")
+    assert.equal(lastUpstream.method, "POST")
+    assert.equal(lastUpstream.url, "/v1/messages", "the route is the provider's own, untouched")
+    const forwarded = JSON.parse(lastUpstream.body)
+    const decoded = anthropicCodec.decode(forwarded.messages)
+    assert.ok(
+      decoded.length < wire.length,
+      "the payload the upstream saw was collapsed: " + wire.length + " -> " + decoded.length + " messages",
+    )
+    const rendered = decoded.map((message) => (message.content ?? []).map((part) => part.text ?? "").join(" ")).join("\n")
+    assert.ok(rendered.includes("Σ"), "and Σ is in it: " + rendered.slice(0, rendered.indexOf("\n")))
+    const marker = viewModule.INJECTED_ID_PREFIX
+    assert.ok(
+      decoded.every((message) => typeof message.id !== "string" || !message.id.startsWith(marker)),
+      "and the private Σ marker id is dropped on the way out to the provider",
+    )
+    checkPairing(decoded, "the payload the upstream saw")
+
+    // --- Auth passes through, and is never invented. --------------------------
+    assert.equal(lastUpstream.headers.authorization, "Bearer proxy-token-123", "the caller's token arrives untouched")
+    await through("/v1/messages", JSON.stringify({ messages: wire.slice(0, 3) }))
+    assert.equal(lastUpstream.headers.authorization, undefined, "and no auth header is invented for one that was not sent")
+
+    // --- A stream is piped, not buffered. -------------------------------------
+    const streamed = await through("/v1/stream", JSON.stringify({ messages: wire.slice(0, 3) }))
+    assert.equal(
+      String(streamed.headers.get("content-type")).includes("text/event-stream"),
+      true,
+      "the stream's content type survives",
+    )
+    const reader = streamed.body.getReader()
+    const startedAt = Date.now()
+    const first = await reader.read()
+    const firstAfter = Date.now() - startedAt
+    assert.equal(first.done, false, "the first chunk arrives while the provider is still writing")
+    assert.ok(firstAfter < 250, "and it arrives before the stream ends, so nothing was buffered: " + firstAfter + "ms")
+    const collected = [Buffer.from(first.value)]
+    for (;;) {
+      const step = await reader.read()
+      if (step.done) break
+      collected.push(Buffer.from(step.value))
+    }
+    assert.equal(
+      Buffer.concat(collected).toString("utf8"),
+      "data: {\"type\":\"message_start\"}\n\ndata: {\"type\":\"content_block_delta\"}\n\ndata: {\"type\":\"message_stop\"}\n\n",
+      "the streamed bytes arrive whole and in order",
+    )
+    assert.equal(streamed.headers.get("content-length"), null, "and no length is promised for a stream")
+
+    // --- What is not a conversation is not rewritten. -------------------------
+    await through("/v1/messages", "not json at all", { "content-type": "text/plain" })
+    assert.equal(lastUpstream.body, "not json at all", "a non-JSON body is forwarded untouched")
+
+    row("proxy daemon rewrite", wire.length + " -> " + decoded.length + " message(s), Σ injected, pairs intact")
+    row("proxy daemon passthrough", "auth verbatim, none invented, stream piped, non-JSON untouched")
+  } finally {
+    for (const server of [daemon, upstream]) {
+      if (typeof server.closeAllConnections === "function") server.closeAllConnections()
+      await new Promise((resolve) => server.close(() => resolve()))
+    }
   }
 }
 

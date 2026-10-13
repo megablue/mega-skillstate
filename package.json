@@ -17,11 +17,28 @@
     "options.json",
     "README.md"
   ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "pi-package"
+  ],
   "license": "MIT",
   "author": "Evert Chin (https://github.com/megablue)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/megablue/mega-skillstate.git"
+  },
+  "peerDependencies": {
+    "pi-ai": "*",
+    "pi-agent-core": "*",
+    "pi-coding-agent": "*",
+    "pi-tui": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/adapters/pi/index.ts"
+    ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

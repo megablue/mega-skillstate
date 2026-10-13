@@ -463,6 +463,19 @@ assert.equal(afterString.state.objective, "written through a string patch")
 assert.equal(afterString.state.decisions["string form"], "parsed by the runtime", "a string patch merges like an object")
 row("state_patch as string", stringAck.replace(/\n/g, " · "))
 
+// This write carries no `summary`, so it used to return `summary: undefined` — and an
+// `undefined` leaf is not JSON. The host rejects the whole result with "Tool returned a
+// non-JSON value for its output schema", *after* `record.apply` has already persisted
+// the write, so the model is told a write failed that in fact landed. A fresh session
+// omits the optional summary on its first write, which is the common case, so the round
+// trip below is what stops every write in a new session from being refused.
+assert.deepEqual(
+  JSON.parse(JSON.stringify(stringPatch.output)),
+  stringPatch.output,
+  "no leaf of the output is `undefined`, or the host rejects the whole result after the write has persisted",
+)
+assert.equal(stringPatch.output.summary, null, "an unset summary is `null`, so a reader can still tell it from a missing key")
+
 const fenced = await tool.execute(
   { state_patch: "```json\n" + JSON.stringify({ objective: "fenced, then decoded" }) + "\n```" },
   stringsCtx("msg_3", "call_state_fenced"),

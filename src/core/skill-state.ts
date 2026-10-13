@@ -219,7 +219,12 @@ export async function writeSkillState(
     changed,
     dropped,
     keys: [...STATE_KEYS],
-    summary: record.summary(),
+    // `summary` is `string | undefined`, and an `undefined` leaf is not JSON: the host
+    // rejects the whole result with "Tool returned a non-JSON value for its output
+    // schema" — after `record.apply` has already persisted the write, so the model is
+    // told a write failed that in fact landed. `null` keeps the key present, so a reader
+    // can still tell "no summary yet" from "no summary at all".
+    summary: record.summary() ?? null,
     tokens: estimateTokens(render(record.get())),
   }
   return { text: ackText({ step, changed, dropped, fromString: parsed.fromString }), output }

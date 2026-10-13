@@ -21,12 +21,10 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 
 ## Map
 
-- `src/adapters/opencode/tool.ts` — `TOOL_NAME = "skill_state"`, `TOOL_INPUT`, `createSkillState({ storage })`,
-  `sessionIdOf`, `textResult`, `parsePatch`/`unfence`/`describe` (the tolerant read of
-  `state_patch`); the `execute` runs the ⊕ patch, handles `Σ.step`, persists through the
-  store, and returns the text ack.
-- `src/adapters/opencode/command.ts` — `createSkillStateCommand`, `stateReport`, `COMMAND_NAME`;
-  `/skillstate` and `/skillstate now` (a forced, awaited pass).
+- `src/core/skill-state.ts` — the host-free write semantics and tool vocabulary: `TOOL_NAME = "skill_state"`, `TOOL_INPUT` (the parameter contract, a union-typed `state_patch` so a quoted string is decoded rather than refused at the host's gate), `TOOL_OUTPUT`, `skillStateDescription`, `sessionIdOf`, `textResult`, `parsePatch`/`unfence`/`describe` (the tolerant read of `state_patch`), and `writeSkillState` — parse, validate `step`/`summary` **before** the store is opened, ⊕ the patch, handle `Σ.step`, persist, return the text ack and the structured output.
+- `src/adapters/opencode/tool.ts` — `createSkillState({ storage })` only: the OpenCode envelope (`options: { codemode: false }`, a permissive `output`, the measured details above) whose `execute` maps args to `SkillStateWrite`, awaits `writeSkillState`, and wraps the result with `textResult`. No write logic remains here; it re-exports the core names.
+- `src/core/skill-state-command.ts` — the command's host-free half: `stateBlock`, `turnIndex`, `stateReport` (all read only a `ContextDescriptor`), plus the reply phrasings `forcedReport`, `nothingYetReport`, `NOW_HINT`, and `COMMAND_NAME = "skillstate"`.
+- `src/adapters/opencode/command.ts` — `createSkillStateCommand({ deps, payloadOf, reply })` only: it reads `invocation.prompt.text` (`now` means force), looks up the live payload, and answers through the injected `reply` channel. It is the seam a second adapter replaces — Pi takes a **string** arg and answers through `ctx.ui.notify`.
 - `src/core/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
   `toolDescription`, `schemaText`, `ackText` (the ack format).
 - `src/core/config.ts` — `resolveOptions` (reads `options.json` and `ctx.options`), `resolveConfig`

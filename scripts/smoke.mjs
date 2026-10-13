@@ -1163,7 +1163,7 @@ console.log("")
     // --- The collapse, through a different seam. ----------------------------------
     const piMessages = buildTranscript(20)
     const rawPairs = checkPairing(piMessages, "the raw Pi transcript")
-    const piEvent = piContextEvent(piMessages)
+    const piEvent = piContextEvent(piMessages, "ses_pi")
     const piHandler = made.events["context"][0]
     const piReport = await piHandler(piEvent)
     assert.ok(piReport !== undefined, "the Pi context handler returns its report")
@@ -1221,18 +1221,18 @@ console.log("")
     // the pass recorded. Both arguments are asserted: the forced pass reports the
     // collapse it ran, and the plain one reports the measurement.
     const commandDefinition = made.commands[0].definition
-    commandDefinition.handler("now", made.makeCtx())
+    await commandDefinition.handler("now", made.makeCtx())
     assert.equal(made.notifications.length, 1, "the forced command replied exactly once")
     assert.equal(made.notifications[0].level, "info", "the reply arrives at info level")
     assert.ok(made.notifications[0].message.includes("context"), "the forced reply reports the context numbers")
-    commandDefinition.handler("", made.makeCtx())
+    await commandDefinition.handler("", made.makeCtx())
     assert.equal(made.notifications.length, 2, "the plain command replied too")
     assert.ok(made.notifications[1].message.includes("Σ"), "the plain reply prints Σ")
 
     // The guard is the reason a notify is written behind mode/hasUI at all: a
     // surface with no UI is a write to a channel nobody reads.
     const beforeGuard = made.notifications.length
-    commandDefinition.handler("now", made.makeCtx({ mode: "headless", hasUI: false }))
+    await commandDefinition.handler("now", made.makeCtx({ mode: "headless", hasUI: false }))
     assert.equal(made.notifications.length, beforeGuard, "a host with no UI reads no reply")
 
     row("pi reply channel", "ctx.ui.notify reached for both arguments, guarded without a UI")

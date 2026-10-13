@@ -1,12 +1,28 @@
 /**
  * The six ports every host adapter implements.
  *
- * Phase 1 *declares* them. The OpenCode adapter already satisfies the collapse,
- * storage, tool and command ones inline in its own modules (`src/adapters/
- * opencode/`), and making them explicit named implementations is the work
- * Phase 2 (Pi) and Phase 3 (the proxy daemon) do — the port list is the
+ * Phase 1 *declared* them. Two hosts now satisfy them: the OpenCode adapter
+ * inline in its own modules (`src/adapters/opencode/`), and the Pi adapter over
+ * its own seams (`src/adapters/pi/`). Storage is the clearest case of why the
+ * list is worth having — the same `stateStore` call reads a keyed KV blob on one
+ * host and an append log reconstructed from a branch on the other, and neither
+ * knows it is talking to anything but a `Storage`.
+ *
+ * What was declared ahead of the evidence was wrong in three places, and commit
+ * `2744efc`'s Phase-2 pass corrected them from measured host shapes rather than
+ * from guesswork: `ToolBridge`/`CommandBridge` claimed a `Disposable` return that
+ * only OpenCode actually produces, and `CollapseStrategy` had no member for the
+ * one decision the two strategies genuinely differ on. The port list is the
  * checklist a new adapter works through, and the thing that keeps `src/core/`
- * from growing a host conditional.
+ * from growing a host conditional — but a checklist written before anyone has
+ * walked it is a guess, so it is corrected by evidence as each host lands.
+ *
+ * One entry-shape detail the Pi work settled, recorded here because the ROADMAP
+ * had it wrong: an extension's entry point is a **default export** taking the
+ * host's `ExtensionAPI` (`export default function (pi: ExtensionAPI)`), not a
+ * named `activate`. A local-path install loads from the resolved path without
+ * copying, so this repo is the Pi package and the manifest's `pi.extensions`
+ * key is what points at that factory.
  *
  * Two rules hold across all six:
  *
@@ -60,11 +76,23 @@ export interface Storage {
  * Both collapse the same span into the same Σ. The `render` member is the seam
  * they share — it is `prompts.stateMessageText`, and a strategy that rendered
  * differently would be a strategy that disagreed with the collapse.
+ *
+ * `collapse` is the other half, and it is the part a declaration cannot leave
+ * implicit: the two strategies above do *not* agree on how a span reaches the
+ * payload. `request-rewrite` splices Σ into the message array in place; a
+ * surface-based host instead records a replacement and lets its own fold apply
+ * it. Both are correct, and choosing between them is exactly the decision a
+ * strategy exists to hold — so it is a member rather than a comment.
  */
 export interface CollapseStrategy {
   readonly kind: "request-rewrite" | "surface-replacement"
   /** Σ plus the span, as the one message the model reads. */
   render(state: Sigma, span: CollapsedSpan | undefined): string
+  /**
+   * Apply a span to a payload, or record it for the host's own fold.
+   * @returns nothing, or the messages the host should send in place of them.
+   */
+  collapse(messages: ReadonlyArray<Message>, span: CollapsedSpan, state: Sigma): void | ReadonlyArray<Message>
 }
 
 /**
@@ -93,6 +121,14 @@ export interface Codec {
  * semantics (the `⊕` patch, the step, the ack) are host-free: only the envelope
  * the host wants around them is not. A host that cannot register a tool at all
  * is a host the core runs without its write channel, and Σ degrades to seeding.
+ *
+ * The return is a `Disposable | undefined` on purpose, and the `undefined` is
+ * not an omission: OpenCode's hooks hand back a registration that unregisters,
+ * but Pi's `registerTool` and `registerCommand` return **void**, and the
+ * two hosts' lifecycles differ further — a Pi factory is not handed a disposer
+ * to call, and a proxy daemon registers at startup and never again. So the port
+ * says what the core can rely on (a disposable when the host offers one) rather
+ * than what one host happens to do.
  */
 export interface ToolBridge {
   register(definition: {
@@ -102,7 +138,7 @@ export interface ToolBridge {
     readonly output?: unknown
     readonly options?: Readonly<Record<string, unknown>>
     execute(input: unknown, context: unknown): Promise<unknown>
-  }): Promise<Disposable>
+  }): Promise<Disposable | undefined> | undefined
 }
 
 /**
@@ -111,13 +147,17 @@ export interface ToolBridge {
  * `/skillstate` prints the context the transform measured and forces a collapse
  * on demand; both need a way back to the user that is not a tool result, which
  * is the whole of this port.
+ *
+ * The return follows {@link ToolBridge} for the same reason: a disposable when
+ * the host offers one. OpenCode's `command.transform` hands one back; Pi's
+ * `registerCommand` returns void.
  */
 export interface CommandBridge {
   register(definition: {
     readonly name: string
     readonly description?: string
     execute(invocation: unknown): Promise<void>
-  }): Promise<Disposable>
+  }): Promise<Disposable | undefined> | undefined
 }
 
 /**

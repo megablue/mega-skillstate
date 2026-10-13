@@ -112,6 +112,17 @@ export function registerPiContext(pi: ExtensionAPI, options: PiContextOptions): 
       // OpenCode's adapter follows, for the same reason: there is nothing to address.
       return { messages: event.messages ?? [] }
     }
+    // A turn must never break because a pass failed.
+    if (options.onRequest !== undefined) {
+      // Recorded before the transform runs, and with the same array reference the pass then
+      // splices in place: a command answered later reads the payload as it now stands, which
+      // is the parity OpenCode's adapter gets by answering from inside the request.
+      options.onRequest(sessionID, {
+        model: (event as { model?: unknown }).model,
+        system: [],
+        messages: event.messages ?? [],
+      })
+    }
     try {
       return await applyTransform(deps, {
         sessionID,

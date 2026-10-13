@@ -767,6 +767,131 @@ row("broken store", "degraded to in-memory, reported, never threw")
 console.log("")
 
 // ---------------------------------------------------------------------------
+// The proxy's session identity and durable store.
+//
+// Everything above drives a host that arrives with a session id already in
+// hand. The proxy does not: Claude Code and Codex send plain HTTP to a base URL
+// that happens to be this daemon, so the key Σ is addressed by has to come out
+// of the request. `src/proxy/session.ts` is that derivation, and
+// `src/proxy/store.ts` is the durable side — the third Storage implementation
+// after OpenCode's keyed blob and Pi's append log, and the one a daemon and a
+// separate MCP process can both hold a handle to.
+//
+// These two are pinned here rather than behind the daemon because they are
+// the parts that fail silently: a key that changes between requests resumes
+// empty, and a store that reads a truncated file half-way is worse than none.
+// ---------------------------------------------------------------------------
+{
+  const session = await load("src/proxy/session.ts")
+  const storeModule = await load("src/proxy/store.ts")
+
+  // --- Session identity. -----------------------------------------------------
+  const FALLBACK = "shared"
+
+  // The header wins outright: it is the one hint an operator set on purpose,
+  // so a body hint must not be able to override it.
+  const fromHeader = session.sessionIdentityOf({ metadata: { user_id: "body-hint" } }, { "x-mega-skillstate-session": "set-by-operator" }, FALLBACK)
+  assert.equal(fromHeader.sessionId, "set-by-operator", "the explicit header wins over a body hint")
+  assert.equal(fromHeader.origin, "header", "and it is reported as the header's answer")
+
+  // Anthropic and Codex both spell the host hint `metadata.user_id`.
+  const fromHint = session.sessionIdentityOf({ metadata: { user_id: "user_9f2c" } }, {}, FALLBACK)
+  assert.equal(fromHint.sessionId, "user_9f2c", "metadata.user_id is the host's own hint")
+  assert.equal(fromHint.origin, "host-hint", "and it is reported as the host's answer")
+
+  // A body with nothing identifiable is still a conversation, so the fallback
+  // is a STRING. `undefined` would mean "the host did not say", and the
+  // transform leaves a payload like that alone — the collapse would skip it.
+  const fallback = session.sessionIdentityOf({ messages: [] }, {}, FALLBACK)
+  assert.equal(fallback.sessionId, FALLBACK, "a request with no hint falls back to the configured key")
+  assert.equal(typeof fallback.sessionId, "string", "and the fallback is a string, not undefined")
+
+  // The key becomes a filename, so a hint shaped like a traversal path has to
+  // be flattened rather than rejected: rejecting would merge two sessions that
+  // differ only in punctuation.
+  const flattened = session.sessionIdentityOf({ metadata: { user_id: "../../elsewhere" } }, {}, FALLBACK)
+  // The trace through sanitize: the dots and dashes stay, each '/' becomes '-',
+  // and then the trim removes the leading '-' WITH the dots (the trim's character
+  // class holds both), so 'elsewhere' is the flattened answer. The two invariants
+  // below are what matter - the result can neither carry a separator nor begin one.
+  assert.equal(flattened.sessionId, "elsewhere", "a traversal-shaped hint is flattened, not honoured")
+  assert.ok(!flattened.sessionId.includes("/") && !flattened.sessionId.includes("."), "and the result cannot become a path")
+
+  // The same hint must give the same key every time: Σ resumes empty when the
+  // derivation drifts, and nothing about that is visible from the request.
+  const again = session.sessionIdentityOf({ metadata: { user_id: "user_9f2c" } }, {}, FALLBACK)
+  assert.equal(again.sessionId, fromHint.sessionId, "the same hint derives the same key, every request")
+
+  // A child agent's request is not distinguishable here — it reaches the
+  // provider through the same base URL and credentials — so answering `true`
+  // on a guess would collapse a main conversation.
+  assert.equal(session.isChildSession(), false, "a subagent is answered false: the proxy cannot tell, and a guess collapses the wrong conversation")
+
+  row("proxy identity", "header > metadata.user_id > a string fallback, traversal hints flattened")
+
+  // --- The durable store. ----------------------------------------------------
+  const scratch = mkdtempSync(join(tmpdir(), "mega-skillstate-filestore-"))
+  try {
+    const store = storeModule.createProxyStore({ dir: scratch })
+    const KEY = "state/ses_proxy"
+
+    // A key that was never written is undefined, not an empty state: the
+    // difference is whether the caller starts a session or half-reads one.
+    const missing = await store.get(KEY)
+    assert.equal(missing, undefined, "a key that was never written is undefined, not an empty Σ")
+
+    const value = { state: { objective: "carried across a restart" }, collapsed: { from: 1, to: 4 }, summary: "note" }
+    await store.set(KEY, value)
+    const back = await store.get(KEY)
+    assert.deepEqual(back, value, "a written value comes back whole — state, span and summary")
+
+    // A file holding something this plugin never wrote is refused rather than
+    // half-read: `load` hands back undefined and the session starts clean.
+    const corruptPath = join(scratch, "state-ses_corrupt.json")
+    writeFileSync(corruptPath, "{not json", "utf8")
+    assert.equal(await store.get("state/ses_corrupt"), undefined, "unreadable bytes are refused, not half-parsed")
+    writeFileSync(join(scratch, "state-ses_wrong.json"), JSON.stringify(["an array"]), "utf8")
+    assert.equal(await store.get("state/ses_wrong"), undefined, "a value that is not a state is refused too")
+
+    // A restart is a new store over the same directory — nothing is cached, by
+    // design, because a second process may share it.
+    const rebuilt = storeModule.createProxyStore({ dir: scratch })
+    assert.deepEqual(await rebuilt.get(KEY), value, "a rebuilt store over the same directory reads the same value")
+
+    await store.remove(KEY)
+    assert.equal(await store.get(KEY), undefined, "remove really removes")
+    assert.equal(await rebuilt.get(KEY), undefined, "and the removal is visible to the other handle")
+
+    // A directory that does not exist yet is created rather than refused: the
+    // daemon should not need a pre-made data dir to start.
+    const nested = join(scratch, "sub", "dir")
+    const made = storeModule.createProxyStore({ dir: nested })
+    await made.set("state/ses_nested", value)
+    assert.deepEqual(await made.get("state/ses_nested"), value, "a data directory that does not exist is created on demand")
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+
+  // --- Both agree. ----------------------------------------------------------
+  // The identity module decides the key; the store turns it into a file. If
+  // the key the derivation produces can escape the directory the store holds,
+  // one session's Σ lands in another's.
+  const storeDir = mkdtempSync(join(tmpdir(), "mega-skillstate-filestore-key-"))
+  try {
+    const store = storeModule.createProxyStore({ dir: storeDir })
+    const wild = session.sessionIdentityOf({ metadata: { user_id: "../../published" } }, {}, FALLBACK)
+    await store.set("state/" + wild.sessionId, { state: { objective: "contained" } })
+    const escaped = join(storeDir, "published.json")
+    assert.ok(!existsSync(escaped), "a wild hint cannot write outside the store's directory")
+    assert.deepEqual(await store.get("state/" + wild.sessionId), { state: { objective: "contained" } }, "it lands inside, under the flattened key")
+  } finally {
+    rmSync(storeDir, { recursive: true, force: true })
+  }
+  row("proxy store", "durable get/set over a directory: missing, corrupt and wrong-shape all read undefined")
+}
+console.log("")
+
+// ---------------------------------------------------------------------------
 // The installer: copy, idempotence on bytes, named drift, and the legacy link.
 //
 // `scripts/install.ts` runs against a scratch directory, never against the real

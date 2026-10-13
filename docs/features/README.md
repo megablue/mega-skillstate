@@ -22,6 +22,7 @@ refactors with no behavior, mechanism, config or test change need no edit.
 | skill_state tool & /skillstate | [skill-state-controls.md](skill-state-controls.md) | the model updating Σ; `state_patch`; the ack; a tool registered but never called; `/skillstate`; forcing a collapse; the stale reminder; **installing or uninstalling the plugin** |
 | Configuration | [configuration.md](configuration.md) | a setting does not take effect; where a config value comes from; the user-level `mega-skillstate.json`; the plugin writing a config file on first run; an unknown key refusing to load |
 | Proxy codecs | [proxy-codecs.md](proxy-codecs.md) | a proxy payload is not what the model sent; a round trip fails on key order; `arguments` came back re-serialised; an encrypted reasoning item or a thinking block reached the core; strip/restore; the `Codec` port |
+| Proxy session & store | [proxy-session-store.md](proxy-session-store.md) | a proxy request arrives with no session id; which session a request belongs to; two conversations sharing one Σ; Σ resumes empty after a restart; a key that becomes a filename; a truncated record |
 
 <!-- One row per feature page (added as pages land). Keep "Read when" a trigger
 someone would search for — the file, the symbol, the symptom — not a

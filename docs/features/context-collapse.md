@@ -66,6 +66,19 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 pairs intact after every phase, **idempotence (two passes, byte-identical)**, `collapseOlder:false`
 and subagent guards, stale reminder only at a balanced tail.
 
+**Byte-level baselines** — the same story as a fixture, so a reshape of the payload passes
+only if it passes every case. `fixtures/golden.json` (8 cases) replays byte-for-byte through
+the OpenCode host: those 8 cases must stay identical across *every* core change, which is
+what makes host-neutrality a measurement rather than a design claim. `fixtures/golden-pi.json`
+(7 cases) replays through `scripts/pi-host.mjs`'s fake host, because Pi's context event
+carries no `system` array and its token counts are message-only — Pi's numbers are its own
+baseline, not a copy of OpenCode's. Re-capture with `scripts/capture-golden.mjs` (`--host pi`
+for the second file), always out to a scratch dir, and only replace a fixture after the diff
+says exactly the cases you meant to change. One derivation to keep straight: the no-session
+case's `expect.report` is `{kind:'no-session-guard', messages}` — a summary of the payload the
+guard hands back, not the report shape — so the replay branches on `!Array.isArray(report?.notes)`
+and asserts the two halves agree on the shape before comparing bytes.
+
 ## Related
 
 - `skill-state.md` — the Σ schema, store and `⊕` merge being injected.

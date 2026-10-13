@@ -33,6 +33,10 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
+// The fake Pi host is shared with the fixture capture, so the double this file
+// asserts against is the double the golden-pi fixture was recorded through.
+import { createPiHost, loadPiFactory, piContextEvent } from "./pi-host.mjs"
+
 const root = resolve(process.argv[2] ?? ".")
 const load = async (relative) => import(pathToFileURL(resolve(root, relative)).href)
 
@@ -1103,6 +1107,139 @@ console.log("")
       rmSync(goldenScratch, { recursive: true, force: true })
     }
     row("golden payloads", replayed + " case(s) replayed byte-for-byte from fixtures/golden.json")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The Pi adapter: the second host over the same core.
+//
+// Everything above drives the OpenCode adapter through `server.ts`. The claim
+// worth pinning here is that the core is not OpenCode's: the same transform, the
+// same Σ write and the same command report arrive through a completely different
+// host surface, and a divergence has to show up here rather than in the user's
+// install. So this builds a fake Pi from the shapes read out of the installed
+// package — a default-export factory handed an `ExtensionAPI` whose
+// `registerTool`/`registerCommand`/`appendEntry` are recorded, and whose context
+// and command handlers are driven directly.
+//
+// What it asserts is deliberately the same four rules, answered by different
+// seams: registration, the collapse, the durable round-trip (Pi's answer is an
+// append log reconstructed from the branch, not a keyed read), and the reply
+// channel (`ctx.ui.notify`, guarded on `mode`/`hasUI`).
+// ---------------------------------------------------------------------------
+{
+  // The fake Pi host itself lives in `./pi-host.mjs`, shared with the fixture
+  // capture, so the double this file asserts against is the one the golden-pi
+  // fixture is recorded through. A second copy would let the harness drift from
+  // the fixture it captured.
+
+  // A scratch user-config path for this host, so the layered config reads exactly
+  // as it does for the OpenCode run and nothing touches a real home.
+  const piScratch = mkdtempSync(join(tmpdir(), "mega-skillstate-pi-"))
+  const previousConfig = process.env.MEGA_SKILLSTATE_CONFIG
+  process.env.MEGA_SKILLSTATE_CONFIG = join(piScratch, "mega-skillstate.json")
+
+  try {
+    // Loaded the way the host loads it: a dynamic import of the module's DEFAULT
+    // export, never a static path, so the module tree can move freely.
+    const factory = await loadPiFactory(load)
+    assert.equal(typeof factory, "function", "the Pi adapter must default-export its factory")
+
+    // --- Registration. -----------------------------------------------------------
+    const made = createPiHost()
+    factory(made.pi)
+
+    assert.equal(made.tools.length, 1, "the Pi adapter registers one tool")
+    assert.equal(made.tools[0].name, "skill_state", "the tool is skill_state, on this host too")
+    assert.equal(made.tools[0].label, "skill_state", "Pi requires a UI label the OpenCode mirror has no equivalent of")
+    assert.equal(made.tools[0].exposure, "direct", "exposure direct is this host's analogue of codemode false")
+    assert.equal(made.commands.length, 1, "the Pi adapter registers one command")
+    assert.equal(made.commands[0].name, "skillstate", "the command is /skillstate, on this host too")
+    assert.equal(made.commands[0].definition.description.length > 0, true, "the command carries a description")
+    assert.equal((made.events["context"] ?? []).length, 1, "one context handler")
+    assert.equal((made.events["before_agent_start"] ?? []).length, 1, "one policy push")
+    row("pi registration", "1 tool (skill_state, exposure direct), 1 command (/skillstate), 1 context handler")
+
+    // --- The collapse, through a different seam. ----------------------------------
+    const piMessages = buildTranscript(20)
+    const rawPairs = checkPairing(piMessages, "the raw Pi transcript")
+    const piEvent = piContextEvent(piMessages)
+    const piHandler = made.events["context"][0]
+    const piReport = await piHandler(piEvent)
+    assert.ok(piReport !== undefined, "the Pi context handler returns its report")
+    const piState = piMessages[1]
+    assert.ok(piState !== undefined, "Σ must be injected on Pi too")
+    assert.equal(piState.id, "mega_state", "Σ carries the injected id prefix on this host too")
+    const keptRecentPi = OPTIONS.keepRecentTurns * 3
+    assert.equal(piMessages.length - 2, keptRecentPi, "the same recent window follows Σ on this host")
+    checkPairing(piMessages, "the Pi payload")
+    assert.equal(rawPairs - (piMessages.length - 2) > 0, true, "the Pi pass actually collapsed a prefix")
+    row("pi collapse", piMessages.length + " message(s), " + piReport.tokensAfter + " tokens, pairs intact")
+
+    // --- The durable round-trip: an append log, not a keyed read. -----------------
+    // OpenCode's storage is a KV blob, so a read is a key. Pi has no such seam:
+    // `appendEntry` writes and the branch is *reconstructed*. So this walks the branch
+    // through the adapter's own `restoreFromBranch` — not a copy of it, because a
+    // re-implementation here would prove the smoke satisfies my idea of the walk
+    // rather than the one Pi's sessions actually depend on.
+    const piStorageModule = await load("src/adapters/pi/storage.ts")
+    assert.equal(piStorageModule.STATE_ENTRY_TYPE, "mega_state", "the durable namespace is mega_state")
+    const probe = []
+    const probeStorage = piStorageModule.createPiStorage({
+      appendEntry: (customType, data) => {
+        probe.push({ customType, data })
+      },
+    })
+
+    const before = made.entries.length
+    const toolDefinition = made.tools[0]
+    const toolCtx = made.makeCtx()
+    const toolResult = await toolDefinition.execute(
+      "call_pi",
+      { state_patch: { objective: "the pi host keeps its own account" } },
+      undefined,
+      undefined,
+      toolCtx,
+    )
+    assert.equal(made.entries.length, before + 1, "a skill_state write appends a durable entry")
+    const appended = made.entries[made.entries.length - 1]
+    assert.equal(appended.customType, "mega_state", "the append is namespaced as mega_state")
+    assert.equal(appended.data.state.objective, "the pi host keeps its own account", "the appended payload carries Σ")
+    assert.ok(toolResult.content[0].text.includes("skill-state updated"), "the write acknowledges")
+
+    const restored = piStorageModule.restoreFromBranch(probeStorage, made.entries)
+    assert.ok(restored !== undefined, "the branch walk hands a state back")
+    assert.equal(restored.state.objective, "the pi host keeps its own account", "the branch walk reconstructs the same Σ")
+    // An empty branch is a first run, not a failure: nothing is restored and the
+    // session runs in memory, which is what every host without a store does anyway.
+    assert.equal(piStorageModule.restoreFromBranch(probeStorage, []), undefined, "an empty branch restores nothing")
+    row("pi durable write", "appended mega_state, branch walk restores Σ")
+
+    // --- The reply channel, and its guard. ------------------------------------------
+    // Pi answers through `ctx.ui.notify`, which is not part of a request — so there
+    // is no in-flight payload to measure and the command reports on the last one
+    // the pass recorded. Both arguments are asserted: the forced pass reports the
+    // collapse it ran, and the plain one reports the measurement.
+    const commandDefinition = made.commands[0].definition
+    commandDefinition.handler("now", made.makeCtx())
+    assert.equal(made.notifications.length, 1, "the forced command replied exactly once")
+    assert.equal(made.notifications[0].level, "info", "the reply arrives at info level")
+    assert.ok(made.notifications[0].message.includes("context"), "the forced reply reports the context numbers")
+    commandDefinition.handler("", made.makeCtx())
+    assert.equal(made.notifications.length, 2, "the plain command replied too")
+    assert.ok(made.notifications[1].message.includes("Σ"), "the plain reply prints Σ")
+
+    // The guard is the reason a notify is written behind mode/hasUI at all: a
+    // surface with no UI is a write to a channel nobody reads.
+    const beforeGuard = made.notifications.length
+    commandDefinition.handler("now", made.makeCtx({ mode: "headless", hasUI: false }))
+    assert.equal(made.notifications.length, beforeGuard, "a host with no UI reads no reply")
+
+    row("pi reply channel", "ctx.ui.notify reached for both arguments, guarded without a UI")
+  } finally {
+    if (previousConfig === undefined) delete process.env.MEGA_SKILLSTATE_CONFIG
+    else process.env.MEGA_SKILLSTATE_CONFIG = previousConfig
+    rmSync(piScratch, { recursive: true, force: true })
   }
 }
 

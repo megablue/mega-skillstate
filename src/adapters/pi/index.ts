@@ -32,7 +32,9 @@
  * @module mega-skillstate/adapters/pi
  */
 
-import { resolveOptions, resolveConfig } from "../../core/config.ts"
+import { fileURLToPath } from "node:url"
+
+import { resolveOptions, resolveConfig, USER_CONFIG_ENV, USER_CONFIG_FILENAME } from "../../core/config.ts"
 import { messageOf } from "../../core/types.ts"
 import type { LastRequest } from "../../core/types.ts"
 import type { TransformDeps } from "../../core/context.ts"
@@ -44,19 +46,27 @@ import { createPiSkillState } from "./tool.ts"
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionToolContext } from "./types.ts"
 
 /**
- * The user-level config option path, in this host's own settings directory.
+ * Where an installed copy keeps its own options: the package root, three levels
+ * above `src/adapters/pi/`.
  *
- * The OpenCode adapter resolves this beside `opencode.json`; this host keeps its own
- * configuration elsewhere, and the plugin's file sits in that directory. Exported so a
- * test can pin where it reads, since a wrong directory reads a file that does not exist
- * and the merge then silently contributes nothing.
+ * The same file the OpenCode path reads, because it is the package's own shipped
+ * layer and this repo is still that package — a copy installed into a discovery
+ * directory has no entry to hand it any (measured), so the file has to be read.
  */
-export const PI_OPTIONS_PATH =
-  process.env["MEGA_SKILLSTATE_PI_OPTIONS"] ?? joinHome(".config", "pi", "mega-skillstate.json")
+export const PI_OPTIONS_PATH = fileURLToPath(new URL("../../../options.json", import.meta.url))
 
-function joinHome(...segments: string[]): string {
+/**
+ * The user-level config file for this host, beside its other user configuration.
+ *
+ * The environment override (`MEGA_SKILLSTATE_CONFIG`) is read when the factory runs
+ * and not at import, so a test can redirect it per call — and so a user who wants
+ * the file somewhere else entirely can say so.
+ */
+export function piUserConfigPath(): string {
+  const override = process.env[USER_CONFIG_ENV]
+  if (typeof override === "string" && override.length > 0) return override
   const home = process.env["HOME"] ?? process.env["USERPROFILE"] ?? "."
-  return [home, ...segments].join("/")
+  return [home, ".config", "pi", USER_CONFIG_FILENAME].join("/")
 }
 
 /**
@@ -74,10 +84,13 @@ export default function (pi: ExtensionAPI): void {
   }
 
   // A refused configuration is loud on purpose: a context policy that quietly keeps a
-  // default is worse than one that refuses to load. The host's own entry has no place in
-  // this host's shape that has been measured, so the layers here are the user file and the
-  // shipped defaults; a discovered extension surface would be merged in front of them.
-  const config = resolveConfig(resolveOptions(undefined, PI_OPTIONS_PATH))
+  // default is worse than one that refuses to load. Three layers, most specific last and
+  // the same three the OpenCode path reads — a host entry (none on this host, because
+  // nothing measured hands an extension an options object), the user's own file, and the
+  // copy an install carries. The shipped `options.json` matters because a copy installed
+  // into a discovery directory has no host entry to hand it any.
+  const userFile = piUserConfigPath()
+  const config = resolveConfig(resolveOptions(undefined, PI_OPTIONS_PATH, userFile))
 
   if (config.enabled !== true) return
 

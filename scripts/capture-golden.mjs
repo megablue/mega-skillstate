@@ -35,6 +35,9 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
+// The Pi fake host is shared with the smoke test: one double, one fixture.
+import { createPiHost, loadPiFactory, piContextEvent } from "./pi-host.mjs"
+
 const root = resolve(process.argv[2] ?? ".")
 const outDir = resolve(process.argv[3] ?? join(root, "fixtures"))
 const load = async (relative) => import(pathToFileURL(resolve(root, relative)).href)
@@ -461,10 +464,133 @@ cases.push(
   }),
 )
 
-mkdirSync(outDir, { recursive: true })
-const golden = { schema: 1, cases }
-writeFileSync(join(outDir, "golden.json"), JSON.stringify(golden, null, 2) + "\n", "utf8")
-row("wrote", join(outDir, "golden.json") + " (" + cases.length + " case(s))")
+// ---------------------------------------------------------------------------
+// The Pi host: a second baseline, recorded but never compared directly.
+//
+// Pi's payload is *not* byte-comparable to OpenCode's and must not be: its
+// context event carries no system array, so its token counts are message-only,
+// and its command replies travel through `ctx.ui.notify` rather than a session
+// prompt. What is pinned here is the same guard applied to the second host —
+// that Pi's own numbers do not drift. Because it is a separate file, a codec
+// divergence shows up as fixture drift on the Pi side and cannot silently
+// pass by matching the OpenCode bytes.
+//
+// The fake host and its helpers are shared with `scripts/smoke.mjs` on purpose:
+// one double, one fixture, no chance of the harness drifting from what it
+// recorded.
+// ---------------------------------------------------------------------------
+const hostFlag = process.argv[4] ?? ""
+const usePi = hostFlag === "pi" || hostFlag === "--host=pi" || hostFlag === "--host pi"
 
-rmSync(scratchHome, { recursive: true, force: true })
-console.log("\ngolden capture: ok")
+/**
+ * Drive one `context` case through the Pi adapter.
+ *
+ * The transcript is copied twice, for the same reason as the OpenCode cases: the
+ * handler splices the event's array in place, so `input` records the fixture and
+ * the event owns a copy of its own. What is recorded differs on purpose — there
+ * is no system array to snapshot, and the numbers are Pi's own.
+ */
+async function capturePiContext(name, spec) {
+  const input = JSON.parse(JSON.stringify(spec.transcript))
+  const made = createPiHost()
+  const factory = await loadPiFactory(load)
+  if (factory === undefined) throw new Error("src/adapters/pi/index.ts must default-export its factory")
+  factory(made.pi)
+  const event = piContextEvent(JSON.parse(JSON.stringify(spec.transcript)), spec.sessionID)
+  let report
+  for (let pass = 0; pass < (spec.passes ?? 1); pass += 1) {
+    report = await made.events["context"][0](event)
+  }
+  checkPairing(event.messages, "the Pi golden payload of " + name)
+  // A payload with no session id is not a failed pass: the adapter's own guard
+  // leaves it exactly as the host built it and hands back the payload rather
+  // than a report. Forcing that through `cutReport` would throw, because it
+  // carries no `notes` array — so the guard's own answer is recorded as it is,
+  // and what is pinned is that nothing was collapsed and nothing was written.
+  const guarded = !Array.isArray(report?.notes)
+  row(
+    name,
+    event.messages.length +
+      " message(s), " +
+      (guarded ? "left alone by the no-session guard" : report.tokensAfter + " tokens"),
+  )
+  return {
+    name,
+    kind: "pi-context",
+    options: spec.options ?? {},
+    storage: "append-log",
+    sessionID: spec.sessionID ?? null,
+    transcript: input,
+    passes: spec.passes ?? 1,
+    expect: {
+      messages: JSON.parse(JSON.stringify(event.messages)),
+      report: guarded
+        ? { kind: "no-session-guard", messages: event.messages.length }
+        : cutReport(report),
+    },
+  }
+}
+
+/**
+ * Drive one command case through the Pi adapter.
+ *
+ * A pass first, so the command has a payload to report on — which on this host
+ * means the `onRequest` recording the pass wrote, not a request in flight. The
+ * reply is what `ctx.ui.notify` was handed, because that is the channel a Pi
+ * user actually reads.
+ */
+async function capturePiCommand(name, spec) {
+  const input = JSON.parse(JSON.stringify(spec.transcript))
+  const made = createPiHost()
+  const factory = await loadPiFactory(load)
+  if (factory === undefined) throw new Error("src/adapters/pi/index.ts must default-export its factory")
+  factory(made.pi)
+  const event = piContextEvent(JSON.parse(JSON.stringify(spec.transcript)), spec.sessionID)
+  const report = await made.events["context"][0](event)
+  await made.commands[0].definition.handler(spec.prompt ?? "now", made.makeCtx())
+  const reply = made.notifications[made.notifications.length - 1].message
+  row(name, "reply " + reply.length + " chars")
+  return {
+    name,
+    kind: "pi-command",
+    options: spec.options ?? {},
+    storage: "append-log",
+    sessionID: spec.sessionID ?? null,
+    transcript: input,
+    prompt: spec.prompt ?? "now",
+    passes: 1,
+    expect: { messages: JSON.parse(JSON.stringify(event.messages)), report: cutReport(report), reply },
+  }
+}
+
+if (usePi) {
+  // A separate list and a separate file on purpose. Pushing these into `cases`
+  // would write them into `fixtures/golden.json`, which is the OpenCode byte
+  // baseline the smoke replays — so a `--host pi` run would silently append rows
+  // to a file that is supposed to mean "the OpenCode adapter has not changed".
+  // Pi's numbers are its own baseline: its context event carries no system array,
+  // so its token counts are message-only and are not comparable to OpenCode's.
+  const piCases = []
+  piCases.push(await capturePiContext("pi-collapse-default", { options: { keepRecentTurns: 4, min: 4, staleAfter: 8 }, sessionID: "ses_pi_default", transcript: buildTranscript(20), passes: 2 }))
+  piCases.push(await capturePiContext("pi-mixed-shape-span", { options: { keepRecentTurns: 2, min: 4, staleAfter: 8 }, sessionID: "ses_pi_mixed", transcript: buildMixedTranscript(12), passes: 2 }))
+  piCases.push(await capturePiContext("pi-seed-off", { options: { keepRecentTurns: 4, min: 4, seedFromTools: false }, sessionID: "ses_pi_seed_off", transcript: buildTranscript(20), passes: 1 }))
+  piCases.push(await capturePiContext("pi-keep-narrow", { options: { keepRecentTurns: 2, min: 4, staleAfter: 8 }, sessionID: "ses_pi_narrow", transcript: buildTranscript(20), passes: 1 }))
+  piCases.push(await capturePiContext("pi-stale-nudge", { options: { keepRecentTurns: 4, min: 4, staleAfter: 3 }, sessionID: "ses_pi_stale", transcript: buildTranscript(20), passes: 4 }))
+  piCases.push(await capturePiCommand("pi-command-now", { options: { keepRecentTurns: 4, min: 4, staleAfter: 8 }, sessionID: "ses_pi_now", transcript: buildTranscript(20), prompt: "now" }))
+  piCases.push(await capturePiContext("pi-no-session-id", { options: { keepRecentTurns: 4, min: 4, staleAfter: 8 }, sessionID: undefined, transcript: buildTranscript(20), passes: 1 }))
+
+  mkdirSync(outDir, { recursive: true })
+  const piPath = join(outDir, "golden-pi.json")
+  writeFileSync(piPath, JSON.stringify({ schema: 1, cases: piCases }, null, 2) + "\n", "utf8")
+  row("wrote", piPath + " (" + piCases.length + " case(s), host pi)")
+  rmSync(scratchHome, { recursive: true, force: true })
+  console.log("\ngolden capture: ok")
+} else {
+  mkdirSync(outDir, { recursive: true })
+  const golden = { schema: 1, cases }
+  writeFileSync(join(outDir, "golden.json"), JSON.stringify(golden, null, 2) + "\n", "utf8")
+  row("wrote", join(outDir, "golden.json") + " (" + cases.length + " case(s))")
+
+  rmSync(scratchHome, { recursive: true, force: true })
+  console.log("\ngolden capture: ok")
+}

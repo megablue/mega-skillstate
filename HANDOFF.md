@@ -9,13 +9,15 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-14`, the tip is `51adc29` ("Correct the ports by Pi's evidence;
-fix the gaps Pi exposed") — `git rev-parse HEAD` for the sha; this file does
+As of `2026-10-13`, the tip is `3108592` ("Name the byte-level baselines in
+the Tests section") — `git rev-parse HEAD` for the sha; this file does
 not name itself, because amending the fill-in would rewrite it again.
-`main` is **ahead of `origin/main` by 8**: `9a9b0d6` (Phase 2 design),
-`17d2c52` (the options-path fix), `6ba8823` (a HANDOFF refresh),
-`fab51f0`, `f56216b`, `1d34a5a`, `2744efc` and `51adc29` are all local-only.
-Phase 1 (`9a2be0a`) **is** pushed — the remote sits before `9a9b0d6`.
+`main` is **ahead of `origin/main` by 11**: `9a9b0d6` (Phase 2 design),
+`17d2c52` (the options-path fix), `6ba8823`, `fab51f0`, `f56216b`,
+`1d34a5a`, `2744efc`, `51adc29`, `8c9c322` (a HANDOFF refresh), `93eb25c`
+and `3108592` (the golden-pi follow-up, below, now closed) are all
+local-only. Phase 1 (`9a2be0a`) **is** pushed — the remote sits before
+`9a9b0d6`.
 
 ## State
 
@@ -93,27 +95,30 @@ Phase 1 (`9a2be0a`) **is** pushed — the remote sits before `9a9b0d6`.
 
 ## Open threads
 
-- **The headline follow-up: the `golden-pi.json` replay is not in the gate.**
-  `fixtures/golden-pi.json` exists and is pinned by
-  `capture-golden.mjs --host pi`, but `smoke.mjs` does not replay it — the
-  byte-level baseline replay was never written. The four pi assertion groups
-  cover the same behaviour directly, so the adapter *is* genuinely pinned and
-  the gate is green for a real reason rather than by absence. What is missing
-  is only the replay. Add it mirroring the `golden.json` block: assert
-  `schema === 1`, then per case create a host with `createPiHost()` +
-  `loadPiFactory(load)`, drive `made.events['context'][0]`
-  `case.passes` times with `piContextEvent(caseTranscriptCopy, case.sessionID)`,
-  and assert `checkPairing` plus byte-identical `messages`/`report` via
-  `asJson`. **Two deviations that cost an afternoon of guessing:** (1) the
-  `no-session-id` case's report is the *guard's* payload-shaped
-  `{kind:'no-session-guard', messages}` — assert `asJson` equality against it
-  directly, **not** through `cutReport`; (2) for the `command-now` case the
-  reply channel is `ctx.ui.notify`, so drive
-  `made.commands[0].definition.handler(case.prompt, made.makeCtx())` and
-  compare the notify message, not `host.prompts`. Rows are named
-  `pi golden: <name>`, plus a `pi golden payloads` summary row.
-- **Push.** All 8 commits above. The last push ran green on both runners, so
-  nothing about `9a2be0a` is in question, but everything since it is foreign.
+- **Closed — the `golden-pi.json` replay is in the gate.** `93eb25c` added
+  it: `smoke.mjs` replays `fixtures/golden-pi.json` (7 cases) byte-for-byte
+  the way it replays `golden.json` (8 cases), and the gate prints
+  `pi golden payloads: 7 case(s) replayed byte-for-byte` plus the OpenCode
+  `8 case(s)`. `3108592` then named both baselines in
+  `docs/features/context-collapse.md` → `## Tests that pin it`. **Two traps
+  cost an afternoon here and are worth keeping:** (1) the capture drove the
+  context pass under one session id and asked the command about
+  `makeCtx`'s default id, so `capturePiCommand` recorded a *correct answer
+  to the wrong question* — the fixture pinned the pre-fix
+  "No request has been seen" reply and the re-capture came back
+  byte-identical until the capture passed
+  `made.makeCtx({ sessionId: spec.sessionID })`; re-capture only after the
+  re-capture *differs*, or you are just re-recording the bug; (2) the
+  no-session case's recorded report is a **summary** shape
+  (`{kind:'no-session-guard', messages}`) derived from the guard's
+  payload-shaped return, not that return value — branch on
+  `!Array.isArray(report?.notes)` and derive the summary exactly as
+  `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
+  through `cutReport` throws, and comparing the raw return never matches.
+  Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
+- **Push.** All 11 commits above. Everything through `51adc29` ran green on
+  both runners, but `8c9c322`, `93eb25c` and `3108592` have never been on
+  CI — they are local-only and unverified by the runners until pushed.
 - **The CLI still runs pre-refactor code.** Both installed scopes —
   project `.opencode/plugin/mega-skillstate` and user
   `~/.config/opencode/plugins/mega-skillstate` — are Oct-9 snapshots of the
@@ -191,8 +196,10 @@ Phase 1 (`9a2be0a`) **is** pushed — the remote sits before `9a9b0d6`.
 
 - The remote exists: `github.com/megablue/mega-skillstate`, `main`, with a CI
   workflow (`typecheck` + `smoke` on ubuntu and windows, node 22) and a
-  `FUNDING.yml`. The last push ran green on both runners; the 8 commits listed
-  at the top are not on it.
+  `FUNDING.yml`. The last push ran green on both runners, but the **11**
+  commits listed at the top are not on it — and the last three (`8c9c322`,
+  `93eb25c`, `3108592`) have never been on a runner at all, so they are
+  unverified by CI until the next push.
 - `~/.config/opencode/mega-skillstate.json` — the live user config; one entry
   beyond the defaults (`feature_map` in `trackTools`). A delete just gets it
   rewritten on the next load; the smoke redirects `MEGA_SKILLSTATE_CONFIG`

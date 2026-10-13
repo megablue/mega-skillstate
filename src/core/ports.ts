@@ -106,12 +106,29 @@ export interface CollapseStrategy {
  *
  * `strip` / `restore` exist because some hosts wrap content the core must not
  * read but must preserve byte for byte.
+ *
+ * The `restore` contract is what makes a round trip exact, and it is the whole
+ * reason this port can be tested without a live host: `encode(decode(host))`
+ * must return the host value unchanged. That holds only if the codec never
+ * *constructs* a part where it could have spread one — the vocabulary's index
+ * signature (`readonly [key: string]: any` on every part) is what carries a
+ * host's extra fields through a decode, and building a fresh `{type, text}`
+ * silently drops them. A host that wraps nothing in the first place — Pi, whose
+ * vocabulary already *is* the core's — returns its input from both members
+ * unchanged.
  */
 export interface Codec {
   /** What came off the host's wire, as core messages. */
   decode(host: unknown): ReadonlyArray<Message>
   /** Core messages, as this host wants to send them. */
   encode(messages: ReadonlyArray<Message>): unknown
+  /**
+   * Content the core must not read but must hand back untouched.
+   * @returns the payload with opaque content removed, and what was removed.
+   */
+  strip(host: unknown): { readonly stripped: unknown; readonly removed: readonly unknown[] }
+  /** Put opaque content back into a payload the core rewrote. */
+  restore(host: unknown, removed: readonly unknown[]): unknown
 }
 
 /**

@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "host": "anthropic-messages",
+  "note": "Hand-written golden transcripts for the proxy's Anthropic codec. `host` is the conversation array (request.messages), not the whole request body: system is outside it, carries nothing to collapse, and is carried by the daemon. Each case must satisfy encode(decode(host)) === host byte for byte, with key order preserved, unknown fields (cache_control, is_error, metadata) surviving, and no tool call split from its result.",
+  "cases": [
+    {
+      "name": "plain-turns",
+      "note": "The baseline: text on both sides, and an empty content array to pin that an empty message survives rather than being dropped.",
+      "host": [
+        {
+          "role": "user",
+          "content": [
+            { "type": "text", "text": "Summarise the plugin in one line.", "cache_control": { "type": "ephemeral" } }
+          ]
+        },
+        { "role": "assistant", "content": [{ "type": "text", "text": "It bounds the context window with an explicit state." }] },
+        { "role": "user", "content": [] }
+      ]
+    },
+    {
+      "name": "tool-pair",
+      "note": "A call and its result in adjacent messages, with is_error and a content array on the result - the fields a rebuilt part would silently drop.",
+      "host": [
+        {
+          "role": "user",
+          "content": [{ "type": "text", "text": "Read src/core/view.ts." }]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            { "type": "text", "text": "Reading it now." },
+            { "type": "tool_use", "id": "toolu_01", "name": "read", "input": { "file_path": "src/core/view.ts" } },
+            { "type": "tool_use", "id": "toolu_02", "name": "read", "input": { "file_path": "src/core/missing.ts" } }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01",
+              "content": [{ "type": "text", "text": "export function viewOf(...)" }]
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_02",
+              "content": "No such file",
+              "is_error": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thinking-and-signature",
+      "expectRemoved": 1,
+      "note": "A thinking block the core must not read but must preserve byte for byte, followed by text and a call. This is what strip/restore are for.",
+      "host": [
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "The user wants the pairing arithmetic checked, so I should read view.ts first.",
+              "signature": "EroYKgkIBhCGAAqCBPLLAA1lAQoB"
+            },
+            { "type": "text", "text": "Let me look." },
+            { "type": "tool_use", "id": "toolu_03", "name": "grep", "input": { "pattern": "balanceCuts" } }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            { "type": "tool_result", "tool_use_id": "toolu_03", "content": "src/core/view.ts:212" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unknown-fields",
+      "note": "Fields the core vocabulary does not name: a server_tool_use part, a message metadata block, and a container on a text block. A codec that constructs rather than spreads drops all three.",
+      "host": [
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "server_tool_use",
+              "id": "srvtoolu_01",
+              "name": "web_search",
+              "input": { "query": "SKILL.state" }
+            },
+            {
+              "type": "web_search_tool_result",
+              "tool_use_id": "srvtoolu_01",
+              "content": [{ "type": "web_search_result", "url": "https://arxiv.org/abs/2608.26263", "title": "SKILL.state" }]
+            }
+          ],
+          "metadata": { "parent_tool_use_id": null, "stop_reason": "tool_use" }
+        },
+        {
+          "role": "user",
+          "content": [{ "type": "text", "text": "Anything else?", "container": null }]
+        }
+      ]
+    }
+  ]
+}

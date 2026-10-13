@@ -1,6 +1,8 @@
 # mega-skillstate — Roadmap (portability)
 
-**Status:** active, Phase 1 not started.
+**Status:** active, Phase 3 underway. Phases 1 (core extraction, `9a2be0a`) and
+2 (Pi adapter, through `51adc29`) are landed and gated green; the proxy's two
+codecs are the first Phase 3 slice.
 **Decided (2026-10-10, user):** Tier 2 (Claude Code / Codex) goes through a
 **wire-level proxy daemon** (full fidelity). Hooks-only degraded mode is a
 fallback only, not a route.
@@ -48,12 +50,13 @@ src/
     seed.ts              derived floor from tracked call arguments
     view.ts              turn numbering, safe cuts, call/result pairing balance
     prompts.ts           section / nudge / ack / report text
-    policy.ts            collapse policy (minTurns, keepRecent, staleAfter, force)
-    tool.ts              skill_state semantics (parse patch, merge, persist, ack)
-    command.ts           /skillstate semantics (branches, report content)
+    context.ts           the host-free transform: applyTransform, describeContext
+    skill-state.ts       the write semantics both hosts' tools wrap
+    skill-state-command.ts  the pure half of the command's report
+    compaction.ts        the compaction seam (duck-typed CompactionEvent)
+    config.ts            resolveOptions / resolveConfig / resolveThresholds
     types.ts             minimal core message/part vocabulary
     ports.ts             the six port interfaces
-    conformance/         host-independent invariant checks + golden fixtures
   adapters/
     opencode/            context hook, skill_state tool, command, StorageDomain
     pi/                  context event, registerTool, registerCommand, appendEntry
@@ -111,10 +114,10 @@ method; adapters translate decisions, they do not implement features.
 **Design** (verified against `pi/packages/coding-agent/src/core/extensions/
 types.ts`, read in full — 2328 lines, 2026-10-13; nothing below is assumed):
 
-**Entry.** A Pi package is an `ExtensionFactory`
-(`export const activate: ExtensionFactory = async (pi) => {…}`), sync or async
-init, and jiti loads the TypeScript directly — no build step. So the adapter's
-entry is a factory, not `setup(ctx)` + a disposable: `registerTool` and
+**Entry.** A Pi package is an `ExtensionFactory` — a **default export** taking
+the host's `ExtensionAPI` (`export default function (pi: ExtensionAPI)`), sync
+or async init, and jiti loads the TypeScript directly — no build step. So the
+adapter's entry is a factory, not `setup(ctx)` + a disposable: `registerTool` and
 `registerCommand` both return `void` (no registration handle to keep, unlike
 OpenCode's `Registration`), and every `on(event, handler)` returns the
 unsubscribe `() => void`, which is the only lifetime the factory holds.
@@ -193,11 +196,15 @@ the manifest fields are unread. Design is settled; these three gate the code.
 - [ ] Daemon skeleton: HTTP server, SSE streaming passthrough, auth passthrough;
       the proxy stores only Σ — request bodies are rewritten in flight, nothing
       else is persisted.
-- [ ] Anthropic Messages codec: `system` + `messages` handling, `tool_use` /
+- [x] Anthropic Messages codec: `system` + `messages` handling, `tool_use` /
       `tool_result` adjacency (same pairing rule as `view.ts`), thinking-safe
-      stripping/restoring.
-- [ ] OpenAI Responses codec: item model (`function_call` /
+      stripping/restoring. **Landed:** `src/proxy/codec-anthropic.ts` +
+      `fixtures/codecs/anthropic.json` (4 cases), replayed byte-for-byte by the
+      smoke's `codec round trip` row.
+- [x] OpenAI Responses codec: item model (`function_call` /
       `function_call_output`), never orphan encrypted reasoning items.
+      **Landed:** `src/proxy/codec-openai.ts` + `fixtures/codecs/openai.json`
+      (5 cases), including the raw-`arguments` whitespace case.
 - [ ] Session identity: map host hints (metadata, headers) → session key;
       document per-host mapping; config fallback.
 - [ ] MCP server exposing `skill_state`, sharing the same Σ store.
@@ -298,10 +305,17 @@ the manifest fields are unread. Design is settled; these three gate the code.
 
 ## 9. Next step (user's call)
 
-1. **Phase 1 kickoff** — golden fixture capture, then core module moves;
-   cheapest way to test the ports without changing behavior.
-2. **DSH spike first** — resolve the backend-vs-standalone question while the
-   core is still a single shape (removes the biggest architectural
-   branch-point before extraction is banked).
-3. **Adjust the roadmap** — edit `docs/ROADMAP.md` first (it ships as its
+1. **Phase 3, slice 2: the daemon skeleton and session identity.** `server.ts`
+   (HTTP reverse proxy, SSE passthrough, auth passthrough) plus `store.ts`
+   (SQLite over the Storage port) and the host-hint mapping that gives Claude
+   Code and Codex a session key. Session identity is the only genuinely novel
+   piece of Phase 3, because both landed adapters arrived with a native session
+   id while CC and Codex send plain HTTP. The codecs are done and need no host
+   to test; this is the part that does.
+2. **Phase 3, slice 3+: mcp.ts, config, setup docs**, closing out the four-part
+   gate (codec golden tests — done; live manual runs on CC and Codex with a
+   visible collapse; pairing-balance fuzz; daemon killed mid-stream).
+3. **DSH (Phase 4) spike** — still worth resolving while the core is a single
+   shape, but Phase 3 is the chosen Tier 2 route and takes precedence.
+4. **Adjust the roadmap** — edit `docs/ROADMAP.md` first (it ships as its
    own commit; follow-ups amend or add doc commits).

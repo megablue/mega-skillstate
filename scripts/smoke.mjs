@@ -1111,6 +1111,94 @@ console.log("")
 }
 
 // ---------------------------------------------------------------------------
+// The codec round trip: the only consumer that does not speak the core
+// vocabulary, pinned without a host.
+//
+// Every adapter so far has translated nothing: Pi's parts already *were* the
+// core's. The proxy is the first that is not, so its whole correctness claim is
+// that decode then encode returns the host's bytes unchanged -- which needs no
+// Anthropic account and no API key to assert.
+//
+// The fixtures are hand-written rather than captured. A codec that only matches
+// a capture is a codec tested against the shapes the capture happened to
+// produce, and the shapes worth pinning here are deliberately awkward: an
+// `arguments` string with whitespace inside it, an `is_error` flag, an
+// encrypted reasoning item, a `web_search_call`, a `null` container.
+//
+// Three assertions per case, and each has failed on its own:
+// (1) `checkPairing` runs on the DECODED form, because a codec that drops or
+//     reorders a part can split a call from its result even when the host's own
+//     transcript was balanced -- and the core never sees the host's.
+// (2) byte identity on encode(decode(host)), which is what catches a codec that
+//     rebuilds a part instead of spreading it: the data survives but the key
+//     order does not, and JSON order is part of the bytes.
+// (3) for the cases naming `expectRemoved`, that `strip` genuinely removes that
+//     much opaque content and `restore` puts exactly it back. Without (3) a
+//     strip that removed nothing would pass, which is a test that cannot fail.
+// ---------------------------------------------------------------------------
+{
+  const codecs = [
+    { label: "anthropic", path: "fixtures/codecs/anthropic.json", module: "src/proxy/codec-anthropic.ts" },
+    { label: "openai", path: "fixtures/codecs/openai.json", module: "src/proxy/codec-openai.ts" },
+  ]
+  let replayed = 0
+
+  for (const spec of codecs) {
+    const fixturePath = join(root, spec.path)
+    if (!existsSync(fixturePath)) {
+      row("codec " + spec.label, "no " + spec.path + " - this host's round trip is unpinned")
+      continue
+    }
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"))
+    assert.equal(fixture.schema, 1, "this smoke reads the codec fixture schema 1")
+    assert.equal(typeof fixture.host, "string", "the fixture names the host it speaks")
+
+    // Loaded by dynamic import, the way the plugin and the state module are: the
+    // proxy has no host entry to load it yet, and a static path would fail the
+    // moment the module tree moves.
+    const module = await load(spec.module)
+    const { decode, encode, strip, restore } = module
+    assert.equal(typeof decode, "function", spec.label + ": the codec must export decode")
+    assert.equal(typeof encode, "function", spec.label + ": the codec must export encode")
+    assert.equal(typeof strip, "function", spec.label + ": the codec must export strip")
+    assert.equal(typeof restore, "function", spec.label + ": the codec must export restore")
+
+    for (const codecCase of fixture.cases) {
+      const label = "codec " + spec.label + ": " + codecCase.name
+      const host = structuredClone(codecCase.host)
+
+      // (1) The core's view of this transcript must still be balanced.
+      const messages = decode(structuredClone(host))
+      assert.ok(Array.isArray(messages), label + ": decode must return the core's message array")
+      checkPairing(messages, label)
+
+      // (2) The bytes must survive the round trip, key order included.
+      assert.equal(
+        JSON.stringify(encode(structuredClone(messages))),
+        JSON.stringify(host),
+        label + ": encode(decode(host)) must be byte-identical",
+      )
+
+      // (3) Strip must remove what it claims, and restore must put it back.
+      const { stripped, removed } = strip(structuredClone(host))
+      assert.equal(
+        JSON.stringify(restore(stripped, removed)),
+        JSON.stringify(host),
+        label + ": restore(strip(host)) must be byte-identical",
+      )
+      if (codecCase.expectRemoved !== undefined) {
+        assert.equal(removed.length, codecCase.expectRemoved, label + ": strip must remove the opaque content the fixture names")
+        assert.notEqual(JSON.stringify(stripped), JSON.stringify(host), label + ": the stripped payload must actually differ from the host's")
+      }
+
+      replayed += 1
+      row(label, host.length + " message(s), round-tripped byte-identical")
+    }
+  }
+  row("codec round trip", replayed + " case(s) replayed byte-for-byte from fixtures/codecs/")
+}
+
+// ---------------------------------------------------------------------------
 // The Pi adapter: the second host over the same core.
 //
 // Everything above drives the OpenCode adapter through `server.ts`. The claim

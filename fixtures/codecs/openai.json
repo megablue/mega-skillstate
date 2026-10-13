@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "host": "openai-responses",
+  "note": "Hand-written golden transcripts for the proxy's OpenAI Responses codec. `host` is the item list (request.input), not the whole request body: instructions are outside it and are carried by the daemon. The item list is FLAT, so each top-level item becomes one core Message holding the translated part, and the item's own `type` rides along so encode knows whether to emit a top-level item or a message. The `function-call-raw-arguments` case pins the sharpest trap: `arguments` is a JSON *string*, and a codec that re-serialises it changes bytes even though the data is identical.",
+  "cases": [
+    {
+      "name": "plain-turns",
+      "note": "The baseline: input_text on the user side, output_text on the assistant side.",
+      "host": [
+        {
+          "type": "message",
+          "id": "msg_1",
+          "role": "user",
+          "content": [{ "type": "input_text", "text": "Summarise the plugin in one line." }]
+        },
+        {
+          "type": "message",
+          "id": "msg_2",
+          "role": "assistant",
+          "content": [{ "type": "output_text", "text": "It bounds the context window with an explicit state." }]
+        }
+      ]
+    },
+    {
+      "name": "function-call-pair",
+      "note": "A function_call and its function_call_output as top-level items, which is why the codec cannot be identity here: both must reach the core as the same shape the Anthropic codec produces.",
+      "host": [
+        {
+          "type": "message",
+          "id": "msg_1",
+          "role": "user",
+          "content": [{ "type": "input_text", "text": "Read src/core/view.ts." }]
+        },
+        {
+          "type": "function_call",
+          "id": "fc_1",
+          "call_id": "call_1",
+          "name": "read",
+          "arguments": "{\"file_path\":\"src/core/view.ts\"}",
+          "status": "completed"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_1",
+          "output": "export function viewOf(...)",
+          "status": "completed"
+        },
+        {
+          "type": "message",
+          "id": "msg_2",
+          "role": "assistant",
+          "content": [{ "type": "output_text", "text": "Done." }]
+        }
+      ]
+    },
+    {
+      "name": "encrypted-reasoning",
+      "expectRemoved": 1,
+      "note": "A reasoning item carrying encrypted_content the core must not read but must hand back untouched. The summary is a list of summary_text parts, so the codec must flatten it without losing the list on the way back.",
+      "host": [
+        {
+          "type": "reasoning",
+          "id": "rs_1",
+          "summary": [{ "type": "summary_text", "text": "The user wants the pairing arithmetic checked." }],
+          "encrypted_content": "gAAAAABoqZ2F1c3Rpb24",
+          "status": "completed"
+        },
+        {
+          "type": "message",
+          "id": "msg_2",
+          "role": "assistant",
+          "content": [{ "type": "output_text", "text": "Let me look." }]
+        }
+      ]
+    },
+    {
+      "name": "function-call-raw-arguments",
+      "note": "The whitespace trap: this `arguments` string has spaces after the colons, so JSON.stringify(JSON.parse(s)) is NOT s. The codec must leave the raw string on the part and only fall back to stringify for a part it created itself.",
+      "host": [
+        {
+          "type": "message",
+          "id": "msg_1",
+          "role": "user",
+          "content": [{ "type": "input_text", "text": "Grep for balanceCuts." }]
+        },
+        {
+          "type": "function_call",
+          "id": "fc_2",
+          "call_id": "call_2",
+          "name": "grep",
+          "arguments": "{ \"pattern\": \"balanceCuts\", \"limit\": 200 }"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_2",
+          "output": "src/core/view.ts:212"
+        }
+      ]
+    },
+    {
+      "name": "unknown-fields",
+      "note": "Item fields the core vocabulary does not name - a web_search_call and a reasoning item with an content block - so a codec that constructs rather than spreads drops them.",
+      "host": [
+        {
+          "type": "web_search_call",
+          "id": "ws_1",
+          "status": "completed",
+          "action": { "type": "search", "query": "SKILL.state" }
+        },
+        {
+          "type": "reasoning",
+          "id": "rs_2",
+          "summary": [],
+          "content": [{ "type": "reasoning_text", "text": "internal only" }]
+        }
+      ]
+    }
+  ]
+}

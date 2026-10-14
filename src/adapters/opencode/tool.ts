@@ -30,6 +30,7 @@ import {
   writeSkillState,
   type SkillStateWrite,
 } from "../../core/skill-state.ts"
+import type { ResolvedConfig } from "../../core/config.ts"
 import type { StorageDomain, ToolCallContext, ToolDefinition, ToolResult } from "./types.ts"
 
 // Re-exported so the names this adapter has always answered for still resolve from the
@@ -49,11 +50,14 @@ export {
  * Build `skill_state`.
  *
  * @param options - the durable store, when the host has one, so a write outlives the
- *   process that made it.
+ *   process that made it; the resolved config, so a Σ past the size line is folded.
  * @returns the tool definition, ready for `tool.transform`.
  */
-export function createSkillState(options: { readonly storage?: StorageDomain } = {}): ToolDefinition {
+export function createSkillState(
+  options: { readonly storage?: StorageDomain; readonly config?: ResolvedConfig } = {},
+): ToolDefinition {
   const storage = options.storage
+  const config = options.config
   return {
     name: TOOL_NAME,
     description: skillStateDescription(),
@@ -77,7 +81,7 @@ export function createSkillState(options: { readonly storage?: StorageDomain } =
         step: raw?.step,
         summary: raw?.summary,
       }
-      const outcome = await writeSkillState(write, { storage })
+      const outcome = await writeSkillState(write, { storage, config })
       return textResult(outcome.text, outcome.output)
     },
   }

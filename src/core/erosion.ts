@@ -115,24 +115,42 @@ export function foldedPatchMarker(keys: ReadonlyArray<string>, bytes: number): s
   return "(folded into Sigma) " + listed + more + " (" + bytes + " bytes)"
 }
 
+/** The two halves of the omission marker, split so its width can be computed first. */
+const OMITTED_HEAD = "\n[... omitted "
+const OMITTED_TAIL = " chars ...]\n"
+
 /**
  * The text of a capped result: the head, the omission marker, and the tail.
  *
- * The marker is charged to the budget, so a capped value is never longer than
- * the cap allows — which is what makes a second pass over it a no-op.
+ * The marker is charged to the budget, so a capped value is never longer than the
+ * cap allows — which is what makes a second pass over it a no-op. Three measured
+ * corrections live in the arithmetic below, because this function got each of them
+ * wrong first, and every one of them was found by printing the value rather than by
+ * reading the code:
+ *
+ * 1. The head is the **value's** head. This used to concatenate `head`, the count,
+ *    so a capped result began with `1986` — a number — where the text it existed to
+ *    keep should have been, and the smoke's `<= budget` assertion passed anyway
+ *    because a four-character number is a very short string.
+ * 2. The marker's width is reserved **arithmetically**, never measured off a built
+ *    placeholder: a placeholder assembled by concatenating a number contributes the
+ *    number's digits, not its digit count, so measuring it under-reserves by
+ *    `digits - 1` and the result lands over its cap.
+ * 3. A value already at or under the budget is handed back untouched, so the
+ *    function is total rather than only correct inside its caller's guard.
  */
 export function cappedResultText(value: string, budget: number): string {
-  // The marker is charged to the budget, so a capped value is never longer than
-  // the cap allows, and a second pass over it is a no-op. The count it carries
-  // is sized from an upper bound, so the marker that actually ships is never
-  // longer than the one the budget was sized for.
-  const placeholder = "\n[... omitted " + String(value.length).length + " chars ...]\n"
-  const room = Math.max(0, budget - placeholder.length)
+  if (value.length <= budget) return value
+  // The omitted count is below the value's own length, so it cannot need more digits
+  // than the length does. Reserving for the longer one is an upper bound on what the
+  // marker will occupy, and the bound is what keeps the result at or under the cap.
+  const reserved = OMITTED_HEAD.length + String(value.length).length + OMITTED_TAIL.length
+  const room = Math.max(0, budget - reserved)
   if (room <= 1) return value.slice(0, budget)
   const head = Math.floor(room / 2)
   const tail = value.slice(value.length - (room - head))
   const omitted = value.length - head - tail.length
-  return head + "\n[... omitted " + omitted + " chars ...]\n" + tail
+  return value.slice(0, head) + OMITTED_HEAD + omitted + OMITTED_TAIL + tail
 }
 
 /** Fold every old turn's patch bodies into markers, counting what it did. */

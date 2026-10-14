@@ -80,8 +80,22 @@ export const DEFAULT_CONFIG = {
    */
   maxResultChars: 4000,
   /**
+   * Fold a finding longer than this into its head and tail, keeping the full text
+   * in the session's archive. 0 disables the fold.
+   *
+   * Gated on `sigmaWarnTokens`: the fold is the answer to the pressure the size
+   * line reports, so a Σ under the line is left exactly as the model wrote it.
+   * Shortening a finding is a real loss — the model reads its own findings, and a
+   * shortened one is shortened for good — so the floor is where the payload cost
+   * of prose starts to outweigh the cost of not having it verbatim. Measured on
+   * three live sessions: a 400-character floor removes 17.6K, 13.3K and 7.5K
+   * tokens of Σ.
+   */
+  sigmaCondenseChars: 400,
+  /**
    * Print a Σ size line in `/skillstate` when Σ's own render passes this many
-   * tokens. 0 disables the line.
+   * tokens, and fold Σ's long findings when a write pushes it past the same line.
+   * 0 disables both.
    */
   sigmaWarnTokens: 16000,
 }
@@ -102,6 +116,7 @@ export interface ResolvedConfig {
   readonly debug: boolean
   readonly foldPatchInputs: boolean
   readonly maxResultChars: number
+  readonly sigmaCondenseChars: number
   readonly sigmaWarnTokens: number
 }
 
@@ -254,6 +269,7 @@ export function resolveConfig(raw?: unknown): ResolvedConfig {
     debug: bool(config.debug, "debug", DEFAULT_CONFIG.debug),
     foldPatchInputs: bool(config.foldPatchInputs, "foldPatchInputs", DEFAULT_CONFIG.foldPatchInputs),
     maxResultChars: integer(config.maxResultChars, "maxResultChars", DEFAULT_CONFIG.maxResultChars, 0),
+    sigmaCondenseChars: integer(config.sigmaCondenseChars, "sigmaCondenseChars", DEFAULT_CONFIG.sigmaCondenseChars, 0),
     sigmaWarnTokens: integer(config.sigmaWarnTokens, "sigmaWarnTokens", DEFAULT_CONFIG.sigmaWarnTokens, 0),
   }
   return frozen(resolved)

@@ -170,7 +170,7 @@ export async function setup(ctx: PluginContext): Promise<() => Promise<void>> {
     }
   }
 
-  const tool = createSkillState({ storage: ctx.storage })
+  const tool = createSkillState({ storage: ctx.storage, config })
   const commandOptions: SkillStateCommandOptions = {
     deps,
     payloadOf: (sessionID) => payloads.get(sessionID),

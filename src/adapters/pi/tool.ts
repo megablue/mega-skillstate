@@ -27,6 +27,7 @@ import {
   skillStateDescription,
   writeSkillState,
 } from "../../core/skill-state.ts"
+import type { ResolvedConfig } from "../../core/config.ts"
 import type { StorageDomain } from "../../core/types.ts"
 import type { ExtensionToolContext, PiToolDefinition, PiToolResult } from "./types.ts"
 
@@ -41,11 +42,14 @@ function toolLabel(): string {
  * Build `skill_state` for Pi's registry.
  *
  * @param options - the durable store, when the host has one, so a write outlives the
- *   process that made it.
+ *   process that made it; the resolved config, so a Σ past the size line is folded.
  * @returns the tool definition, ready for `registerTool`.
  */
-export function createPiSkillState(options: { readonly storage?: StorageDomain } = {}): PiToolDefinition {
+export function createPiSkillState(
+  options: { readonly storage?: StorageDomain; readonly config?: ResolvedConfig } = {},
+): PiToolDefinition {
   const storage = options.storage
+  const config = options.config
   return {
     name: TOOL_NAME,
     label: toolLabel(),
@@ -73,7 +77,7 @@ export function createPiSkillState(options: { readonly storage?: StorageDomain }
         step: params?.step,
         summary: params?.summary,
       }
-      const outcome = await writeSkillState(write, { storage })
+      const outcome = await writeSkillState(write, { storage, config })
       return { content: [{ type: "text", text: outcome.text }], details: outcome.output }
     },
   }

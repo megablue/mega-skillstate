@@ -13,5 +13,6 @@
   "debug": false,
   "foldPatchInputs": true,
   "maxResultChars": 4000,
+  "sigmaCondenseChars": 400,
   "sigmaWarnTokens": 16000
 }

@@ -25,7 +25,14 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 ## Map
 
 - `src/core/skill-state.ts` — the host-free write semantics and tool vocabulary: `TOOL_NAME = "skill_state"`, `TOOL_INPUT` (the parameter contract, a union-typed `state_patch` so a quoted string is decoded rather than refused at the host's gate), `TOOL_OUTPUT`, `skillStateDescription`, `sessionIdOf`, `textResult`, `parsePatch`/`unfence`/`describe` (the tolerant read of `state_patch`), and `writeSkillState` — parse, validate `step`/`summary` **before** the store is opened, ⊕ the patch, handle `Σ.step`, persist, return the text ack and the structured output.
-- `src/adapters/opencode/tool.ts` — `createSkillState({ storage })` only: the OpenCode envelope (`options: { codemode: false }`, a permissive `output`, the measured details above) whose `execute` maps args to `SkillStateWrite`, awaits `writeSkillState`, and wraps the result with `textResult`. No write logic remains here; it re-exports the core names.
+- `src/core/sigma-condense.ts` — the fold that answers the size line, host-free:
+  `condense(findings, archive, { maxChars })` → `{ findings, archive, report }`, with
+  `correctedKey` (a closed suffix list, never a prefix — that would merge two different
+  lessons that share a first word), `seriesStem` (numbered variants, three members
+  minimum), `foldedFindingText` (head + marker + tail, the marker charged to the budget)
+  and `boundedArchive` (`MAX_ARCHIVE_CHARS`, oldest out first, the newest entry never the
+  one dropped). `writeSkillState` is its only caller, through `condensePast`.
+- `src/adapters/opencode/tool.ts` — `createSkillState({ storage, config })` only: the OpenCode envelope (`options: { codemode: false }`, a permissive `output`, the measured details above) whose `execute` maps args to `SkillStateWrite`, awaits `writeSkillState`, and wraps the result with `textResult`. No write logic remains here; it re-exports the core names.
 - `src/core/skill-state-command.ts` — the command's host-free half: `stateBlock`, `turnIndex`, `stateReport` (all read only a `ContextDescriptor`), plus the reply phrasings `forcedReport`, `nothingYetReport`, `NOW_HINT`, and `COMMAND_NAME = "skillstate"`.
 - `src/adapters/opencode/command.ts` — `createSkillStateCommand({ deps, payloadOf, reply })` only: it reads `invocation.prompt.text` (`now` means force), looks up the live payload, and answers through the injected `reply` channel. It is the seam a second adapter replaces — Pi takes a **string** arg and answers through `ctx.ui.notify`.
 - `src/core/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
@@ -130,10 +137,15 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 | `nudgeWhenStale` | `true` | remind the model to update Σ after a stretch with no new instruction |
 | `staleAfter` | `8` | steps with no new user message before the nudge |
 | `manualCommand` | `true` | expose `/skillstate` |
-| `sigmaWarnTokens` | `16000` | print a Σ size line in `/skillstate` when Σ's own render passes this many tokens; `0` disables |
+| `sigmaWarnTokens` | `16000` | print a Σ size line in `/skillstate` when Σ's own render passes this many tokens, **and fold Σ** when a write pushes it past the same line; `0` disables both |
+| `sigmaCondenseChars` | `400` | fold a finding longer than this into its head and tail, keeping the full text in the session archive; `0` disables the fold |
 
-`sigmaWarnTokens` is the only key this page owns that the transform does not
-read: it shapes the report's size line and nothing else.
+`sigmaWarnTokens` and `sigmaCondenseChars` are the two keys this page owns that the
+transform does not read: they shape the report's size line and the write path's fold,
+and nothing in the context pass consults either. The gate is deliberately the same
+threshold as the line — the line names the pressure and the fold is what answers it,
+so a model is told and then helped rather than quietly edited. Measured on three live
+sessions, a 400-character floor removes 17.6K, 13.3K and 7.5K tokens of Σ.
 
 ## Tests that pin it
 
@@ -143,7 +155,13 @@ step) · dropped (not in the schema): not_a_key`), **the durable write** it pers
 string both write and the ack says the string was parsed; a broken string and a non-object
 string refuse with Σ and the step untouched), `/skillstate` prints Σ + the per-turn index,
 `/skillstate now` forces a pass leaving pairs intact, stale reminder appended only at a
-balanced tail.
+balanced tail, the **Σ size line** past `sigmaWarnTokens` and its silence below it, the
+**fold** (one long finding folded to head and tail, a correction and a two-of-three
+series superseded, the marker naming exactly what left, the archive holding all 90,000
+characters, and the size line then silent because what it complained about is gone), its
+**idempotence** (a second write leaves the findings and the archive byte-identical), and
+the **archive bound** (a finding larger than the bound entire: the newest fold survives
+and the oldest entry yields to it).
 
 ## Related
 

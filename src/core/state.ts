@@ -33,6 +33,15 @@
 import { changedKeys, merge, validateKeys, type Sigma } from "./schema.ts"
 import type { CollapsedSpan, StorageDomain } from "./types.ts"
 
+/**
+ * The full text of findings a fold replaced, keyed by the finding it came from.
+ *
+ * Cold storage by design: `render` never emits it, so it costs no payload, and it
+ * rides inside the same durable record as the Σ it explains, so one write keeps the
+ * pair together.
+ */
+export type Archive = Readonly<Record<string, string>>
+
 /** What the durable store holds for one session. */
 export interface PersistedState {
   /** Σ as the model last committed it. */
@@ -41,6 +50,8 @@ export interface PersistedState {
   readonly collapsed: CollapsedSpan | undefined
   /** The model's own one-line note about the last write. */
   readonly summary: string | undefined
+  /** What condensation took out of Σ's render, when it has taken anything. */
+  readonly archive?: Archive
 }
 
 /** What the store is allowed to reach outside itself. */
@@ -58,6 +69,16 @@ export interface StateRecord {
   get(): Sigma
   /** Replace Σ wholesale; keys the schema does not own are dropped. */
   set(next: Sigma): Promise<void>
+  /** The full text of findings a fold replaced; empty when nothing has folded. */
+  archive(): Archive
+  /**
+   * Replace Σ and the archive the fold replaced it with, in one durable write.
+   *
+   * One write and not two, because the pair has to land together: a state whose
+   * folded text arrived without the archive that holds it is a state the fold
+   * destroyed.
+   */
+  fold(next: Sigma, archive: Archive): Promise<void>
   /** `⊕` a patch into Σ. @returns the keys that actually changed, in schema order. */
   apply(patch: unknown): Promise<string[]>
   /**
@@ -111,10 +132,22 @@ export function stateKey(sessionID: string): string {
   return "state/" + sessionID
 }
 
+/** What a stored archive is, keeping the entries that are text and dropping the rest. */
+function readArchive(value: unknown): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {}
+  const held: Record<string, string> = {}
+  for (const key of Object.keys(value)) {
+    const text = (value as Record<string, unknown>)[key]
+    if (typeof text === "string") held[key] = text
+  }
+  return held
+}
+
 function createRecord(id: string, deps: StoreDeps, loaded: PersistedState | undefined): StateRecord {
   let state: Sigma = loaded === undefined ? {} : validateKeys(loaded.state)
   let span: CollapsedSpan | undefined = loaded?.collapsed
   let summary: string | undefined = loaded?.summary
+  let archive: Record<string, string> = readArchive(loaded?.archive)
   let stepsSinceUser = 0
   let lastUser: string | undefined
   const turns = new Map<string, number>()
@@ -131,7 +164,14 @@ function createRecord(id: string, deps: StoreDeps, loaded: PersistedState | unde
    */
   const persist = async (): Promise<void> => {
     if (storage === undefined) return
-    const snapshot: PersistedState = { state, collapsed: span, summary }
+    const snapshot: PersistedState = {
+      state,
+      collapsed: span,
+      summary,
+      // Absent rather than empty when nothing has folded, so a session that never
+      // condensed persists exactly the shape it always did.
+      archive: Object.keys(archive).length === 0 ? undefined : archive,
+    }
     try {
       await storage.set(stateKey(id), snapshot)
     } catch (error) {
@@ -146,6 +186,12 @@ function createRecord(id: string, deps: StoreDeps, loaded: PersistedState | unde
       const before = state
       state = validateKeys(next)
       if (before !== state) await persist()
+    },
+    archive: () => archive,
+    fold: async (next, held) => {
+      state = validateKeys(next)
+      archive = readArchive(held)
+      await persist()
     },
     apply: async (patch) => {
       const before = state

@@ -45,7 +45,18 @@ explicit off switch (`foldPatchInputs`, `maxResultChars: 0`).
 
 When Σ has grown past `sigmaWarnTokens`, `/skillstate` says so and names the key
 that dominates it, because Σ is injected into every request and the collapse is
-indifferent to how much that costs.
+indifferent to how much that costs. The same threshold is where **Σ is folded**: a
+write that finds Σ past it condenses the state's own prose, so whatever made Σ big
+stops being charged to every request. Two folds, both decided by a key and never by
+reading the prose — a finding whose key is another key plus a correction
+(`note_corrected`, `_again`, `_final`) replaces the key it corrects, and a numbered
+series (`probe_step3`) keeps only its newest member; and a finding longer than
+`sigmaCondenseChars` keeps its head and its tail. What leaves the render is written
+to the session's **archive**, inside the same durable record and never rendered, so
+the text is recoverable rather than destroyed; the archive is bounded oldest-first
+and the newest fold is never the entry dropped. Folding is idempotent and inert
+below the threshold, so a small session's Σ is left exactly as the model wrote it.
+`sigmaCondenseChars: 0` disables it.
 
 ## Compaction
 

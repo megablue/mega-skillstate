@@ -133,7 +133,7 @@ export default function (pi: ExtensionAPI): void {
     log,
   }
 
-  const tool = createPiSkillState({ storage })
+  const tool = createPiSkillState({ storage, config })
   const command = createPiSkillStateCommand({
     deps,
     payloadOf: (sessionID) => payloads.get(sessionID),

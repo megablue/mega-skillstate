@@ -2411,54 +2411,56 @@ console.log("")
 }
 
 // ---------------------------------------------------------------------------
-// The Sigma size line: the one erosion the collapse cannot see.
+// Σ's own growth: the size line, and the fold that answers it.
 //
 // Sigma is injected into every request, so its own growth is charged to every
 // request. On the measured live case Sigma was ~41,000 tokens of a 458,000
 // token payload - a tenth of the window it was bounding. The line names the
 // dominant key, because "consolidate" without saying what dominates is advice
-// the model cannot act on.
+// the model cannot act on. The fold is the same threshold doing something about
+// it, and the cases below are the two halves of that: a Sigma the fold cannot
+// shrink is still named, and a Sigma it can shrink stops being a problem the
+// model has to be told about.
 // ---------------------------------------------------------------------------
 {
-  const sigmaHost = createHost()
-  const sigmaDispose = await plugin.default.setup(sigmaHost.context)
-  const sigmaEvent = {
-    sessionID: "ses_sigma_warn",
+  // --- The line, on a Σ the fold cannot shrink. ----------------------------
+  // Many findings, every one of them under the floor: nothing here can fold, so
+  // the line is the only thing that can react to the size.
+  const wideHost = createHost()
+  const wideDispose = await plugin.default.setup(wideHost.context)
+  await wideHost.contextHooks[0]({
+    sessionID: "ses_sigma_wide",
     agent: "build",
     model: MODEL,
     system: [],
     tools: {},
     messages: buildTranscript(6),
-  }
-  await sigmaHost.contextHooks[0](sigmaEvent)
-  // A findings blob large enough to cross the 16,000-token line on its own.
-  await sigmaHost.tools[0].execute(
-    { state_patch: { findings: { "big-finding": filler("finding", 90000) } }, summary: "a very large Sigma" },
-    {
-      sessionID: "ses_sigma_warn",
-      agent: "build",
-      messageID: "msg_sigma",
-      id: "call_sigma",
-      signal: new AbortController().signal,
-    },
+  })
+  const many = {}
+  // 230 x 380 characters is ~22,000 tokens, well past the 16,000-token line, and
+  // every entry is under the 400-character floor, so the fold has nothing to do.
+  for (let index = 0; index < 230; index += 1) many["finding-" + index] = filler("finding " + index, 380)
+  const wideAck = await wideHost.tools[0].execute(
+    { state_patch: { findings: many }, summary: "a wide Sigma" },
+    { sessionID: "ses_sigma_wide", agent: "build", messageID: "msg_wide", id: "call_wide", signal: new AbortController().signal },
   )
-  await sigmaHost.commands[0].execute({ sessionID: "ses_sigma_warn", prompt: {} })
-  const printed = sigmaHost.prompts[sigmaHost.prompts.length - 1].text
+  assert.equal(wideAck.output.condensed, undefined, "a Sigma of short findings has nothing to fold")
+  await wideHost.commands[0].execute({ sessionID: "ses_sigma_wide", prompt: {} })
+  const printed = wideHost.prompts[wideHost.prompts.length - 1].text
   assert.ok(printed.includes("over the 16000-token line"), "a Sigma past the threshold is named: " + printed.slice(-300))
   assert.ok(printed.includes("findings"), "and the dominant key is named too")
 
   // Under the threshold, the line is absent rather than printed with a zero.
   const quietHost = createHost()
   const quietDispose = await plugin.default.setup(quietHost.context)
-  const quietEvent = {
+  await quietHost.contextHooks[0]({
     sessionID: "ses_sigma_quiet",
     agent: "build",
     model: MODEL,
     system: [],
     tools: {},
     messages: buildTranscript(6),
-  }
-  await quietHost.contextHooks[0](quietEvent)
+  })
   await quietHost.tools[0].execute(
     { state_patch: { objective: "something small" }, summary: "a small Sigma" },
     { sessionID: "ses_sigma_quiet", agent: "build", messageID: "msg_q", id: "call_q", signal: new AbortController().signal },
@@ -2467,8 +2469,104 @@ console.log("")
   const quiet = quietHost.prompts[quietHost.prompts.length - 1].text
   assert.ok(!quiet.includes("-token line"), "a Sigma under the threshold prints no warning: " + quiet.slice(-200))
   row("sigma warning", "printed past 16000 tokens with its dominant key, silent below it")
+
+  // --- The fold, on a Σ that is over the line and long. --------------------
+  // One write carries all three rules: a finding over the floor, a key a later key
+  // corrects, and a numbered series. The pair and the series are deliberately
+  // small — they are here for the rule, not for the bytes.
+  const foldHost = createHost()
+  const foldDispose = await plugin.default.setup(foldHost.context)
+  await foldHost.contextHooks[0]({
+    sessionID: "ses_sigma_fold",
+    agent: "build",
+    model: MODEL,
+    system: [],
+    tools: {},
+    messages: buildTranscript(6),
+  })
+  const foldAck = await foldHost.tools[0].execute(
+    {
+      state_patch: {
+        findings: {
+          long: filler("finding", 90000),
+          note: "the first account of the note",
+          note_corrected: "the corrected account of the note",
+          probe_step1: "the first probe",
+          probe_step2: "the second probe",
+          probe_step3: "the third probe",
+        },
+      },
+      summary: "a very large Sigma",
+    },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_fold", id: "call_fold", signal: new AbortController().signal },
+  )
+  assert.ok(foldAck.output.condensed, "a write that crossed the line reports what it folded")
+  assert.equal(foldAck.output.condensed.folded, 1, "one finding was too long to keep whole")
+  assert.equal(foldAck.output.condensed.superseded, 3, "a corrected key and two of three series members stood down")
+  row("sigma fold", "1 folded and 3 superseded, " + foldAck.output.condensed.bytesFreed + " chars out of the render")
+
+  const stateModule = await load("src/core/state.ts")
+  const stored = foldHost.storage.map.get(stateModule.stateKey("ses_sigma_fold"))
+  const foldedFindings = stored.state.findings
+  assert.ok(foldedFindings.long.length <= 400, "the long finding is at or under the floor: " + foldedFindings.long.length)
+  const marker = /\n\[\.\.\. folded (\d+) chars into the archive \.\.\.\]\n/.exec(foldedFindings.long)
+  assert.ok(marker !== null, "and it says where the rest went: " + foldedFindings.long.slice(150, 300))
+  assert.equal(
+    Number(marker[1]) + (foldedFindings.long.length - marker[0].length),
+    90000,
+    "the marker names exactly what left, so head + tail + folded is the whole finding",
+  )
+  assert.equal(stored.archive.long.length, 90000, "the archive holds every character of it")
+  assert.equal(foldedFindings.note, undefined, "a correction replaces the account it corrects")
+  assert.equal(stored.archive.note, "the first account of the note", "which is kept rather than lost")
+  assert.equal(foldedFindings.note_corrected, "the corrected account of the note", "and the correction survives whole")
+  assert.equal(foldedFindings.probe_step3, "the third probe", "a numbered series keeps its newest member")
+  assert.equal(stored.archive.probe_step1, "the first probe", "and the older members are kept out of the render")
+  assert.equal(stored.archive.probe_step2, "the second probe", "each under the key it came from")
+
+  // The line it just answered is silent, because the size it complained about is gone.
+  await foldHost.commands[0].execute({ sessionID: "ses_sigma_fold", prompt: {} })
+  const afterFold = foldHost.prompts[foldHost.prompts.length - 1].text
+  assert.ok(!afterFold.includes("-token line"), "the fold removed what the line complained about: " + afterFold.slice(-200))
+
+  // Idempotence: a write carrying no findings leaves both halves byte-identical.
+  const heldFindings = JSON.stringify(foldedFindings)
+  const heldArchive = JSON.stringify(stored.archive)
+  await foldHost.tools[0].execute(
+    { state_patch: { objective: "nothing to fold here" }, summary: "a second write" },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_fold2", id: "call_fold2", signal: new AbortController().signal },
+  )
+  const after = foldHost.storage.map.get(stateModule.stateKey("ses_sigma_fold"))
+  assert.equal(JSON.stringify(after.state.findings), heldFindings, "a second pass over folded findings is a no-op")
+  assert.equal(JSON.stringify(after.archive), heldArchive, "and the archive does not grow a second time")
+  row("sigma fold idempotent", "a second write leaves the findings and the archive byte-identical")
+
+  // --- The bound, on a fold larger than the archive may keep. --------------
+  // A finding bigger than the whole archive. The newest entry is never the one
+  // dropped: a bound that evicted the text just taken out of the render would be
+  // the loss the archive exists to prevent, and it was, until the loop was measured.
+  const boundAck = await foldHost.tools[0].execute(
+    {
+      state_patch: {
+        findings: {
+          small: filler("the smaller finding", 1000),
+          huge: filler("the huge finding", 300000),
+        },
+      },
+      summary: "a Sigma past the archive bound",
+    },
+    { sessionID: "ses_sigma_bound", agent: "build", messageID: "msg_bound", id: "call_bound", signal: new AbortController().signal },
+  )
+  assert.equal(boundAck.output.condensed.folded, 2, "both findings are over the floor")
+  const boundRecord = foldHost.storage.map.get(stateModule.stateKey("ses_sigma_bound"))
+  assert.equal(boundRecord.archive.huge.length, 300000, "the newest fold survives a bound it exceeds on its own")
+  assert.equal(boundRecord.archive.small, undefined, "and the older entry yields to the bound")
+  assert.ok(boundRecord.state.findings.huge.length <= 400, "the render is bounded whatever the archive does")
+  row("sigma archive bound", "the newest fold survives, the oldest yields, the render is bounded either way")
+
+  await wideDispose().catch(() => {})
   await quietDispose().catch(() => {})
-  await sigmaDispose().catch(() => {})
+  await foldDispose().catch(() => {})
 }
 
 // ---------------------------------------------------------------------------

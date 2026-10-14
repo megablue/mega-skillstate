@@ -24,8 +24,10 @@
 
 import { ackText, toolDescription } from "./prompts.ts"
 import { isPlainObject, render, STATE_KEYS, unknownKeys } from "./schema.ts"
-import { stateStore } from "./state.ts"
+import { condense, type CondenseReport } from "./sigma-condense.ts"
+import { stateStore, type StateRecord } from "./state.ts"
 import { estimateTokens } from "./context.ts"
+import type { ResolvedConfig } from "./config.ts"
 import type { StorageDomain } from "./types.ts"
 
 /** The tool's name, which is also what the standing policy tells the model to call. */
@@ -166,6 +168,31 @@ export function describe(value: unknown): string {
 }
 
 /**
+ * Fold Σ's long findings when this write has pushed it past the size line.
+ *
+ * The gate is the same threshold the report's size line uses, and that is the point
+ * of it: the line names the pressure and the fold is what answers it, so the model is
+ * told and then helped rather than quietly edited. Below the line nothing happens at
+ * all — a small Σ is left exactly as the model wrote it.
+ *
+ * @returns what the fold did, or `undefined` when it did nothing.
+ */
+async function condensePast(
+  record: StateRecord,
+  config: ResolvedConfig | undefined,
+): Promise<CondenseReport | undefined> {
+  if (config === undefined || config.sigmaCondenseChars <= 0 || config.sigmaWarnTokens <= 0) return undefined
+  const state = record.get()
+  if (estimateTokens(render(state)) < config.sigmaWarnTokens) return undefined
+  const findings = state["findings"]
+  if (!isPlainObject(findings)) return undefined
+  const folded = condense(findings, record.archive(), { maxChars: config.sigmaCondenseChars })
+  if (folded.report.folded === 0 && folded.report.superseded === 0) return undefined
+  await record.fold({ ...state, findings: folded.findings }, folded.archive)
+  return folded.report
+}
+
+/**
  * Run one `skill_state` write: parse, validate, merge, persist, acknowledge.
  *
  * The order is the whole contract. A malformed patch never reaches Σ — it is refused
@@ -175,13 +202,15 @@ export function describe(value: unknown): string {
  * what the store holds.
  *
  * @param input - what the model sent, plus the session it sent it from.
- * @param options - the durable store, when the host has one.
+ * @param options - the durable store, when the host has one; the resolved configuration,
+ *   when the host's config says how large a Σ may grow before it is folded.
  */
 export async function writeSkillState(
   input: SkillStateWrite,
-  options: { readonly storage?: StorageDomain } = {},
+  options: { readonly storage?: StorageDomain; readonly config?: ResolvedConfig } = {},
 ): Promise<SkillStateOutcome> {
   const storage = options.storage
+  const config = options.config
   const sessionID = input.sessionID
   if (sessionID === undefined || sessionID.length === 0) {
     return {
@@ -213,6 +242,13 @@ export async function writeSkillState(
   const changed = await record.apply(written)
   if (typeof input.summary === "string") await record.setSummary(input.summary)
 
+  // Σ only grows, and every character of it is charged to every request. The fold runs
+  // here — inside the write, after the merge, on the state the merge produced — because
+  // this is the one moment the runtime holds the whole of Σ and a reason to look at its
+  // size. Nothing folded means nothing written: `condensePast` returns without touching
+  // the record, so an untouched write costs exactly what it always did.
+  const condensed = await condensePast(record, config)
+
   const output: Record<string, unknown> = {
     kind: "state",
     step,
@@ -227,5 +263,8 @@ export async function writeSkillState(
     summary: record.summary() ?? null,
     tokens: estimateTokens(render(record.get())),
   }
+  // The fold is reported rather than silent: the render carries a marker where the text
+  // was, and this is the machine-readable half of the same statement.
+  if (condensed !== undefined) output["condensed"] = condensed
   return { text: ackText({ step, changed, dropped, fromString: parsed.fromString }), output }
 }

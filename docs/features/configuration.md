@@ -20,7 +20,7 @@ touching the real home; the daemon's port, upstream, codec or Σ directory.
 
 ## Map
 
-- `src/core/config.ts` — `DEFAULT_CONFIG` (the 15 keys), `readJsonFile()`, `objectLayer()`,
+- `src/core/config.ts` — `DEFAULT_CONFIG` (the 16 keys), `readJsonFile()`, `objectLayer()`,
   `resolveOptions(hostOptions, optionsFile?, userFile?)` (the layered merge),
   `resolveConfig` (strict, per-key fallback to the default), `resolveThresholds`,
   `USER_CONFIG_FILENAME` / `USER_CONFIG_ENV`.
@@ -56,7 +56,7 @@ touching the real home; the daemon's port, upstream, codec or Σ directory.
   file is the layer that is neither: per-user, never committed, surviving an
   install, and outranking the copy's `options.json`.
 - **The ladder, key by key.** A later layer overwrites only the keys it sets; the
-  rest fall through to the layer below. The shipped `options.json` lists all 15
+  rest fall through to the layer below. The shipped `options.json` lists all 16
   keys, so the merge changes no behaviour today — it becomes true layering the
   moment someone trims that file or ships a partial one.
 - **The drift trap.** `.opencode/plugin/mega-skillstate` is a *copy* of the shipped
@@ -88,7 +88,7 @@ touching the real home; the daemon's port, upstream, codec or Σ directory.
 
 ## Config keys / UI
 
-The 15 keys and their defaults are documented per feature — see **Related** below
+The 16 keys and their defaults are documented per feature — see **Related** below
 for the page that owns each. This page owns only where a value comes from:
 `DEFAULT_CONFIG` < `options.json` < `~/.config/opencode/mega-skillstate.json` < the
 host's plugin entry.
@@ -102,7 +102,7 @@ forwards credentials it does not hold. `dir` is optional: with one Σ survives t
 process, without one the daemon collapses in memory and a restart resumes empty
 — the degraded mode every host without a storage seam gets. `port` is `8787`, and
 `fallbackSession` is `"shared"`, with the sharing trap documented in
-[proxy-session-store.md](proxy-session-store.md). The 15 collapse keys reach the
+[proxy-session-store.md](proxy-session-store.md). The 16 collapse keys reach the
 daemon **by delegation** to `resolveConfig`, not by a second copy of the rules:
 `debug` exists in both key sets and is left entirely to the core, so it resolves
 once. That is the shape to copy — duplicating the strictness is how the two
@@ -125,6 +125,7 @@ depth, where a missing file is silently nothing.
   `allowSubagentSessions`, `nudgeWhenStale`, `staleAfter`, `debug`).
 - [skill-state.md](skill-state.md) — `seedFromTools`, `trackTools`, `debug`.
 - [skill-state-controls.md](skill-state-controls.md) — `enabled`,
-  `nudgeWhenStale`, `staleAfter`, `manualCommand`.
+  `nudgeWhenStale`, `staleAfter`, `manualCommand`, `sigmaWarnTokens`,
+  `sigmaCondenseChars`.
 - [compaction.md](compaction.md) — `enabled`, `collapseOlder`, `seedFromTools`,
   `trackTools`, `debug`.

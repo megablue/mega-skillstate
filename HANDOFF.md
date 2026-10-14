@@ -9,16 +9,15 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-14`, the tip is `2052fbf` ("Pin the pairing fuzz and the kill
-case the Phase 3 gate still owed") - `git rev-parse HEAD` for the sha; this file
-does not name itself, because amending the fill-in would rewrite it again.
-`main` is **ahead of `origin/main` by 2** (`2052fbf` and this handoff
-correction are local, not pushed) - measured 2026-10-14; the check that never
-goes stale is `git rev-list --count origin/main..HEAD`, because this header
-cannot re-count itself after it lands. Every commit from
-`9a2be0a` (Phase 1) through `6d52475` (the two wiring setup
-docs) is on the remote, and the CI run for that pushed tip (`38540464010`)
-went green on both runners. **Push is an open thread.**
+As of `2026-10-15`, the tip is `beeb72f` ("Fold the model's own patch bodies
+out of the window the collapse keeps") - `git rev-parse HEAD` for the sha; this
+file does not name itself, because amending the fill-in would rewrite it again.
+`main` is **ahead of `origin/main` by 1** (`beeb72f` is local, not pushed) -
+measured 2026-10-15; the check that never goes stale is `git rev-list --count
+origin/main..HEAD`, because this header cannot re-count itself after it lands.
+Every commit from `9a2be0a` (Phase 1) through `47e8a4f` (the handoff correction)
+is on the remote and the CI run for that pushed tip (`38540464010`) went green on
+both runners. **Push the erosion commit is an open thread.**
 
 ## State
 
@@ -95,6 +94,37 @@ went green on both runners. **Push is an open thread.**
   `fileURLToPath(new URL(` and re-pin.
 
 ## Open threads
+
+- **Payload erosion (levers A, C, D shipped; B research-only) — `beeb72f`.**
+  `src/core/erosion.ts` (new) plus step 7 of `applyTransform`, after the collapse
+  and the seed and before the nudge, so it works on the final payload while the
+  seed and the fold arithmetic still read the raw conversation. Two cuts, both
+  content-only and both idempotent by construction: **fold** an old turn's
+  `skill_state` patch body into a marker (`foldPatchInputs`, default on), and
+  **cap** an old turn's oversized result to head + omission marker + tail
+  (`maxResultChars`, 4000, `0` disables; `glob` exempt, because the seed reads
+  one). The **Σ size line** is the third lever (`sigmaWarnTokens`, 16000, `0`
+  disables) and it changes only the `/skillstate` report, never the payload.
+  Everything is pinned in the smoke (`erosion`, `erosion idempotence`, `erosion
+  config`, `sigma warning`), and the 8 + 9 golden cases stayed byte-identical,
+  which is the proof the change was behaviour-neutral where nothing needed
+  changing.
+- **What this actually was, and the correction it carries.** The live case that
+  opened the section was `417369 -> 458371` tokens on a pass that folded nothing
+  (`msf-6k9`). The synthetic probe had priced the erosion as 99-99.9% tool-result
+  value; **measuring the real sessions said otherwise** — the kept window is the
+  model's own patch bodies (38-52%) and reasoning (25-84%), not tool results
+  (10-22%). The table in ROADMAP §10 records the four sessions. Read it before
+  assuming a probe described this workload.
+- **B (reasoning pruning) is research-only, and it is the biggest lever left.**
+  A reasoning part cannot be truncated without severing a provider signature, and
+  dropping one wholesale is a different decision again — whether the host
+  forwards the field at all, and in what shape. Nothing here is measured: it
+  needs a provider answer first.
+- **Σ condensation (`docs/OPTIMIZATIONS.md` F6) — measured, not shipped.** Σ is
+  findings-dominated in every real session (86.5% PLO1, 79.5% phase2). The
+  warning line ships; a condenser that folds resolved findings does not, and is
+  the obvious next thing to price.
 
 - **Closed — the `golden-pi.json` replay is in the gate.** `93eb25c` added
   it: `smoke.mjs` replays `fixtures/golden-pi.json` (7 cases) byte-for-byte
@@ -210,8 +240,8 @@ went green on both runners. **Push is an open thread.**
 
 ## Local-only state (not on the remote)
 
-- One commit is local-only: `2052fbf` ("Pin the pairing fuzz and the kill case
-  the Phase 3 gate still owed"). Everything else in the State section above is
+- One commit is local-only: `beeb72f` ("Fold the model's own patch bodies out of
+  the window the collapse keeps"). Everything else in the State section above is
   on `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
   `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`),
   and the run for the pushed tip (`38540464010`) is green on both runners. The

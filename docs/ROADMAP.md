@@ -338,73 +338,127 @@ the manifest fields are unread. Design is settled; these three gate the code.
 4. **Adjust the roadmap** — edit `docs/ROADMAP.md` first (it ships as its
    own commit; follow-ups amend or add doc commits).
 
-## 10. Deferred work — payload erosion (measured 2026-10-14; user-deferred)
+## 10. Payload erosion — what shipped, and what the measurement actually said
 
 A live `/skillstate now` reported `context 417369 -> 458371 tokens` with "Σ
 already stands for turns 2-18; nothing left to collapse this pass" — a
 41,002-token **increase** on a pass that folded nothing. The reply's third line,
 "the next request carries the collapsed payload", was untrue on that pass and was
-removed in `82f9d1c`; the erosion itself was deliberately left untouched and is
-recorded here rather than fixed.
+removed in `82f9d1c`; the erosion itself shipped in `beeb72f` and is recorded
+here, because the measurement that decided it corrected the one this section
+previously carried.
 
-### What was measured
+### What the live number decomposes into
 
-Four runs of the real `applyTransform` over synthetic transcripts, each final
-payload decomposed into policy, Σ and the kept window (scratch probe, since
-deleted; 4 chars ≈ 1 token):
+`tokensBefore` excludes Σ — the pass strips the injected message first — so the
+458,371-token payload is **~417K kept window + ~41K Σ**. That Σ figure is not a
+constant: it was ~164K chars at the reading and had grown to ~224K chars by the
+time it was measured again. Σ is injected into *every* request, so its growth is
+the one erosion the collapse cannot see, because the collapse is turn-gated and
+indifferent to how many tokens the state message costs.
 
-| transcript | tool result | before | after | kept window | tool-result share | Σ |
-|---|---|---|---|---|---|---|
-| control | 2,400 ch | 15,433 | 3,631 | 3,207 | 75% | 124 |
-| big | 120,000 ch | 603,433 | 121,231 | 120,807 | 99% | 124 |
-| huge | 400,000 ch | 2,003,433 | 401,231 | 400,807 | 99.9% | 124 |
-| live-like (18 turns, 3 passes) | 300,000 ch | 1,353,142 | 301,231 | 300,807 | 99.9% | 124 |
+### What the window is actually made of
 
-The collapse folded the **identical** span — turns 2-17, 48 messages — at 15,433
-tokens and at 2,003,433 tokens. The mechanism is indifferent to payload size
-because `min` is a **turn count**, and it counted correctly every time. The
-erosion is entirely the window the collapse deliberately keeps, and in every big
-run that window is 99-99.9% tool-result value (user 445 tok, assistant 362,
-tool-call 42).
+The synthetic probe that priced this section ran `applyTransform` over
+transcripts whose tool results were 2,400 to 400,000 chars, and concluded the
+kept window was 99-99.9% tool-result value. **That conclusion is wrong about real
+sessions.** Measuring the real sessions' kept windows from `opencode.db` (the last
+four user turns of PLO1, JEV, phase2 and the refactor session, split by part type
+and by tool):
 
-**Limitation, stated because it bounds the conclusion:** Σ measured only 124
-tokens in all four runs, because the synthetic transcripts never accumulate
-state. That figure says nothing about the live 41,002-token Σ.
+| session | window chars | skill_state patches | reasoning | tool results |
+|---|---|---|---|---|
+| PLO1 | 1,257,251 | 38.1% | 31.1% | 21.7% |
+| JEV | 475,326 | 51.8% | 24.9% | 11.2% |
+| phase2 @ seq 8147 | 1,799,318 | 44.6% | 32.8% | 11.2% |
+| refactor | 1,069,130 | 2.4% | 83.8% | 10.0% |
 
-### Two independent problems, two independent fixes
+So the two dominant components are the model's **own patch inputs** and
+**reasoning** — not tool results, which the synthetic probe had inverted. In PLO1,
+tool-call inputs are 44.6% of the window and `skill_state` patches are 85.6% of
+those inputs (479,501 of 560,227 chars). Results *are* concentrated in a handful
+of huge ones (82-95% of tool-output bytes in results over 2,000 chars), but they
+are a minority of the window. The ordering matters: folding patch bodies addresses
+the largest component, capping results addresses a smaller one, and Σ's own text
+is a third.
+
+### Shipped in `beeb72f`
+
+- **Fold** (`foldPatchInputs`, default on): an old turn's `skill_state` patch body
+  becomes a marker naming its keys and byte size. Σ in the same payload already
+  renders the merged result and the call's own result says which keys moved, so
+  the body is pure redundancy.
+- **Cap** (`maxResultChars`, 4000, 0 disables): an old turn's string result over
+  the budget becomes head + omission marker + tail; `glob` is exempt because the
+  seed extracts its file list from one.
+- **Warn** (`sigmaWarnTokens`, 16000, 0 disables): `/skillstate` prints a Σ size
+  line naming the dominant key past the threshold, because Σ's own growth is
+  charged to every request and the collapse cannot see it.
+
+All three are content-only, ordered as step 7 of `applyTransform` — after the
+collapse and the seed, before the nudge — so the seed and the fold-span arithmetic
+still read the raw conversation. Both cuts are idempotent by construction (a folded
+patch is a string and the fold only rewrites plain objects; a capped value is
+already under its budget), and the live turn is never touched. The golden
+fixtures did not move, which is the point of keeping them byte-identical.
+
+### What the two-causes table got wrong, and what the correction buys
+
+The table this section carried until `beeb72f` was:
 
 | cause | share of the live 417K | fix |
 |---|---|---|
 | kept window's tool results | ~90% (~376K) | a result-size threshold the collapse can act on |
 | Σ's own accumulated text | ~10% (~41K) | condensation, or a size warning |
 
-Fixing only the smaller one leaves the payload essentially unchanged, so the
-condensation hypothesis — the obvious first answer — is refuted as the
-**primary** fix.
+It was right that there are two independent causes, and right that fixing only
+the smaller one leaves the payload essentially unchanged — which is why the
+condensation hypothesis was refuted as the **primary** fix. It was wrong about
+which cause was which: the measured windows above say patch inputs are the
+largest component and results a minority. So the order of work was inverted, and
+the result cap shipped as the second lever rather than the first.
 
-### Option A — result-size threshold (the primary fix)
+### Σ's own growth, measured rather than probed
 
-- Needs its own design decisions first: a per-result cap; whether oversized
-  results are folded individually or replaced with a summary reference; and what
-  the model actually loses when a 300,000-char result becomes a pointer.
-- **Trap:** Σ is seeded from exactly the window that will survive and rendered
-  **once** at injection. Folding part of the kept window changes what survives,
-  so the seed and the fold must be ordered together — or the idempotence trap
-  reappears in a new form, and "idempotent" quietly means "the last two passes
-  agreed".
+`render(Σ)` over the same real sessions, findings-dominated in every one:
 
-### Option B — measure Σ's own growth first
+| session | Σ total | findings share |
+|---|---|---|
+| PLO1 | ~189,538 B (~47K tok) | 86.5% |
+| phase2 | ~224,341 B (~56K tok) | 79.5% |
+| refactor | ~70,775 B (~18K tok) | 64.8% |
+| JEV | ~24,447 B (~6K tok) | 25.3% |
 
-- The probe's 124 tokens proves nothing either way: drive the state store over
-  many accumulating turns and measure `render(Σ)` for a real figure.
-- Worth doing regardless, as the input to any size warning under Option A.
+So Σ is a real and growing cost in exactly the sessions that use it most, and
+the lever that addresses it condenses **findings** rather than the state as a
+whole. A `sigmaWarnTokens` line now reports the size in `/skillstate`, and a
+condenser that folds resolved findings is the obvious next thing to price.
 
-### Also still open
+### The ordering trap, and why it held
 
-From `docs/OPTIMIZATIONS.md` (another session's report): F2 — 29 soft refusals
-because `state_patch` arrived as malformed JSON, 26 of them a single extra
-trailing brace, suggesting an enriched refusal naming the parse error and
-position plus a tolerant repair for that one class; F1's second half (validation
-after persistence); F3 (step fused with the payload); F4 (model-authored
-objective garble); F5 (ack ambiguity); F6 (Σ growth — priced in the table above);
-F7 (the installed copy lags the repo, so no fix here is live until reinstall).
+Σ is seeded from exactly the window that will survive and rendered **once** at
+injection, so the erosion pass had to sit *after* both — re-deriving its view of
+the final payload rather than the pre-collapse one, because a summary computed
+over payload the pass was about to rewrite is not the payload the model sees.
+Both cuts are idempotent, which is what makes that ordering safe: a folded patch
+is a string, a capped value is under its budget, and a second pass can produce
+nothing new. This is also why the golden fixtures did not move.
+
+### Still open
+
+- **Reasoning** — the component the old table never counted, now measured at
+  31% (PLO1) to 84% (refactor) of the kept window, and the largest single
+  remaining one. A reasoning part cannot be truncated without severing a
+  provider signature, and dropping one wholesale is a different decision again:
+  whether the host forwards the field at all, and in what shape. Until a provider
+  answers that, a reasoning cut is a guess whose failure mode is a rejected
+  signature, so it stays research rather than a lever.
+- **Σ condensation** (OPTIMIZATIONS F6) — priced above; findings-dominated, and
+  the warning line already ships.
+- From `docs/OPTIMIZATIONS.md` (another session's report): F2 — 29 soft refusals
+  because `state_patch` arrived as malformed JSON, 26 of them a single extra
+  trailing brace, suggesting an enriched refusal naming the parse error and
+  position plus a tolerant repair for that one class; F1's second half (validation
+  after persistence); F3 (step fused with the payload); F4 (model-authored
+  objective garble); F5 (ack ambiguity); F7 (the installed copy lags the repo, so
+  nothing here is live until a reinstall and a restart).

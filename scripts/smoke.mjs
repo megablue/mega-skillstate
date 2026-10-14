@@ -578,6 +578,14 @@ await host.commands[0].execute({ sessionID: "ses_smoke", prompt: { text: "now" }
 assert.equal(host.prompts.length, 2, "`now` replies once")
 const forced = host.prompts[1].text
 assert.ok(forced.includes("Σ already stands for turns 2-17"), forced)
+// The line this pins: a forced pass that folded nothing must not claim the next
+// request carries a collapsed payload. A live run hit exactly this branch (an
+// already-collapsed span) and printed the claim alongside a 41,000-token
+// regression, so the reply contradicted its own first line.
+assert.ok(
+  !forced.includes("the next request carries the collapsed payload"),
+  "a pass that folded nothing must not claim it collapsed anything: " + forced,
+)
 checkPairing(messages, "the payload after /skillstate now")
 row("/skillstate now", "forced a pass, left the pairs intact")
 

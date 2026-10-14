@@ -6560,7 +6560,7 @@
           "nudged": false,
           "notes": []
         },
-        "reply": "Σ already stands for turns 2-17; nothing left to collapse this pass\ncontext 3210 -> 3384 tokens\nthe next request carries the collapsed payload; the one this call came from is already in flight"
+        "reply": "Σ already stands for turns 2-17; nothing left to collapse this pass\ncontext 3210 -> 3384 tokens"
       }
     },
     {

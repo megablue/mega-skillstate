@@ -133,9 +133,17 @@ export function forcedReport(input: {
     )
   }
   lines.push("context " + input.tokensBefore + " -> " + input.tokensAfter + " tokens")
-  // This line is only ever written for a hand-asked pass: the request carrying the
-  // command has already been sent, so the collapse it forces reaches the *next* one.
-  lines.push("the next request carries the collapsed payload; the one this call came from is already in flight")
+  // This line is only ever written when this pass actually folded something: the
+  // request carrying the command has already been sent, so the collapse it
+  // forces reaches the *next* one. When the span is already collapsed, or when
+  // nothing could be collapsed at all, the next request carries the same payload
+  // *plus* Σ rather than a newly collapsed one — and claiming otherwise reads as
+  // a result when it is a constant. A live pass once printed this alongside a
+  // 41,000-token regression, which is exactly when the model is asking whether
+  // Σ is working. See `msf-ld0`.
+  if (input.collapsed !== undefined && input.collapsed.messages > 0) {
+    lines.push("the next request carries the collapsed payload; the one this call came from is already in flight")
+  }
   for (const note of input.notes) lines.push("note: " + note)
   return lines.join("\n")
 }

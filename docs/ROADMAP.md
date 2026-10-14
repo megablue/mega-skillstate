@@ -212,7 +212,10 @@ the manifest fields are unread. Design is settled; these three gate the code.
       a dependency-free durable file store (no cache, temp-file-plus-rename
       writes), so the "SQLite" wording above is a planned shape, not what
       landed; SQLite stays a named follow-up.
-- [ ] MCP server exposing `skill_state`, sharing the same Σ store.
+- [x] MCP server exposing `skill_state`, sharing the same Σ store. **Landed:**
+  `src/proxy/mcp.ts` (`30bc1a3`) — transport-free JSON-RPC dispatch pinned by the
+  smoke's `proxy mcp` row; the session key derived with `sessionIdentityOf`
+  verbatim so a write lands under the daemon's key.
 - [ ] Config file: port, upstreams, thresholds (mirror `options.json`), debug.
 - [ ] Claude Code setup doc: `ANTHROPIC_BASE_URL`; optional hook bridge for
       status display; `PreCompact` policy option (default: leave CC's compaction

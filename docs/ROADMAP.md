@@ -216,7 +216,13 @@ the manifest fields are unread. Design is settled; these three gate the code.
   `src/proxy/mcp.ts` (`30bc1a3`) — transport-free JSON-RPC dispatch pinned by the
   smoke's `proxy mcp` row; the session key derived with `sessionIdentityOf`
   verbatim so a write lands under the daemon's key.
-- [ ] Config file: port, upstreams, thresholds (mirror `options.json`), debug.
+- [x] Config file: port, upstreams, thresholds (mirror `options.json`), debug.
+  **Landed:** `src/proxy/config.ts` (`0a7d852`) — the daemon's own keys with the
+  core's collapse keys reached by **delegation** rather than duplication, so
+  the strictness lives in one place and `debug` resolves once. `upstream` and
+  `codec` have **no default on purpose**; `host` binds loopback; `dir` is
+  optional (memory-only is a real mode). Pinned by the smoke's `proxy config`
+  row.
 - [ ] Claude Code setup doc: `ANTHROPIC_BASE_URL`; optional hook bridge for
       status display; `PreCompact` policy option (default: leave CC's compaction
       alone — our collapse keeps the surface small so it rarely fires).

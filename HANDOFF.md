@@ -9,15 +9,15 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-15` (refreshed at the condenser commit), the tip is `424b719`
-("Fold Σ's own prose, and keep what the fold takes out") - `git rev-parse HEAD`
-for the sha; this file does not name itself, because amending the fill-in would
-rewrite it again. `main` is **ahead of `origin/main` by 1** (`424b719` is local,
-not pushed) - measured by `git rev-list --count origin/main..HEAD` after that
-commit landed, which is the check that never goes stale, because this header
-cannot re-count itself. Everything through `6937529` is on the remote and the CI
-run for that pushed tip (`38606383441`) went green on both runners. **Push the
-condenser commit is an open thread.**
+As of the read-path commit, the tip is `0e0e298` ("Read the fold back:
+`/skillstate <key>` and `/skillstate archive`) - `git rev-parse HEAD` for the sha;
+this file does not name itself, because amending the fill-in would rewrite it
+again. `main` is **ahead of `origin/main` by 1** (`0e0e298` is local, not pushed) -
+measured by `git rev-list --count origin/main..HEAD` after that commit landed,
+which is the check that never goes stale, because this header cannot re-count
+itself. Everything through `c63da54` is on the remote and the CI run for that
+pushed tip (`38613861197`) went green on both runners. **Push the read-path commit
+is an open thread.**
 
 ## State
 
@@ -136,9 +136,9 @@ condenser commit is an open thread.**
   it), bounded oldest-first with the newest entry never the one dropped
   (`MAX_ARCHIVE_CHARS` 262144). It reads back through `/skillstate <key>`, which prints
   one entry in full, and `/skillstate archive`, which lists what was set aside; both
-  answer without a payload, because the archive is durable. The floor, not the mechanism,
-  is
-  the decision, and it was measured from the store first: 400 removes 17.6K / 13.3K
+  answer without a payload, because the archive is durable. The floor, not the
+  mechanism, is the decision, and it was measured from the store first: 400 removes
+  17.6K / 13.3K
   / 7.5K tokens on the three live sessions, 800 only 3.9K / 4.5K / 5.5K. Key
   supersession on its own is about 3K characters — hygiene, because the merge
   already replaces a same-key value — so the length fold is the lever.
@@ -156,6 +156,25 @@ condenser commit is an open thread.**
   text it kept should have been; the smoke's `<= 4000` assertion passed because a
   four-character number is a very short string. Capped payload bytes changed here —
   if a result's exact bytes matter, re-measure rather than recall.
+
+- **The archive read path — `0e0e298`**, and the answer to "the fold took it, now
+  what". `/skillstate <key>` prints one finding in full out of the session archive;
+  `/skillstate archive` lists what was set aside, largest first, marking the keys Σ
+  no longer holds. `parseAsk` splits the argument into the four asks in
+  `core/skill-state-command.ts` so both hosts share the words; `recordFor` reaches a
+  record from `deps` rather than from a live payload, which is why a recall answers
+  in a session no request has reached; the size line now names the archive and the
+  command once a fold has run, so a model told to consolidate can see the way back.
+  Pinned by the `skillstate archive` and `skillstate recall` rows — the decisive
+  assertion is that the reply contains the *middle* of the folded value while the
+  render does not (a literal marker, not a filler window, because the filler repeats
+  by period). **The installed copies lagged this commit by five files and were
+  re-synced the same day (`plugin:status` "in sync", 41 files each); a host restart
+  is what loads it, and until that restart the live `/skillstate` has no archive
+  clause and no recall.** A *model-callable* recall is deliberately not built — a
+  `skill_state` argument would change `TOOL_INPUT`, the wire tools listing and
+  therefore both golden fixtures, and the host's `required: ["state_patch"]` gate
+  would need a no-op patch or a schema change. That is a scope call for the user.
 
 - **Closed — the `golden-pi.json` replay is in the gate.** `93eb25c` added
   it: `smoke.mjs` replays `fixtures/golden-pi.json` (7 cases) byte-for-byte
@@ -178,9 +197,10 @@ condenser commit is an open thread.**
   `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
   through `cutReport` throws, and comparing the raw return never matches.
   Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
-- **Push — one commit owed.** Everything through `6937529` (the ROADMAP §10
-  measurement) is pushed and its run (`38606383441`) is green on both runners;
-  only `424b719` is local (measured `origin/main..HEAD` = 1 at handover). The run
+- **Push — one commit owed, and it moved.** Everything through `c63da54` is
+  pushed and its run (`38613861197`) is green on both runners; `424b719` and
+  `c63da54` went up together, and `0e0e298` (the read path) is now the local one
+  (measured `origin/main..HEAD` = 1 at handover). The run
   for the first push of the Phase 2 batch (`38387263678`) was red at `npm ci` —
   the lock file lagged the `1d34a5a` peerDependencies — and `7f23890` fixed it,
   with run `38388970742` green on both runners. Two traps from that history are
@@ -272,11 +292,12 @@ condenser commit is an open thread.**
 
 ## Local-only state (not on the remote)
 
-- One commit is local-only: `424b719` ("Fold Σ's own prose, and keep what the fold
-  takes out"). Everything else is on `github.com/megablue/mega-skillstate` (`main`,
-  with a CI workflow running `typecheck` + `smoke` on ubuntu and windows, node 22,
-  and a `FUNDING.yml`), and the run for the pushed tip (`6937529`, run
-  `38606383441`) is green on both runners. The one red run (`38387263678`, named
+- One commit is local-only: `0e0e298` ("Read the fold back: `/skillstate <key>` and
+  `/skillstate archive`"). Everything else is on
+  `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
+  `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`), and
+  the run for the pushed tip (`c63da54`, run `38613861197`) is green on both
+  runners. The one red run (`38387263678`, named
   after a docs-only commit but actually the `npm ci` EUSAGE on the lock file) was
   fixed by `7f23890` and is history, not an open thread.
 - `~/.config/opencode/mega-skillstate.json` — the live user config; one entry

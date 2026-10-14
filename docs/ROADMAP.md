@@ -193,9 +193,10 @@ the manifest fields are unread. Design is settled; these three gate the code.
 
 ### Phase 3 — Tier 2 proxy daemon (the chosen Tier 2 route)
 
-- [ ] Daemon skeleton: HTTP server, SSE streaming passthrough, auth passthrough;
+- [x] Daemon skeleton: HTTP server, SSE streaming passthrough, auth passthrough;
       the proxy stores only Σ — request bodies are rewritten in flight, nothing
-      else is persisted.
+      else is persisted. **Landed:** `src/proxy/server.ts` (`faa6dc3`) — pinned
+      against a real HTTP boundary by the smoke's two proxy-daemon rows.
 - [x] Anthropic Messages codec: `system` + `messages` handling, `tool_use` /
       `tool_result` adjacency (same pairing rule as `view.ts`), thinking-safe
       stripping/restoring. **Landed:** `src/proxy/codec-anthropic.ts` +
@@ -205,8 +206,12 @@ the manifest fields are unread. Design is settled; these three gate the code.
       `function_call_output`), never orphan encrypted reasoning items.
       **Landed:** `src/proxy/codec-openai.ts` + `fixtures/codecs/openai.json`
       (5 cases), including the raw-`arguments` whitespace case.
-- [ ] Session identity: map host hints (metadata, headers) → session key;
-      document per-host mapping; config fallback.
+- [x] Session identity: map host hints (metadata, headers) → session key;
+      document per-host mapping; config fallback. **Landed:**
+      `src/proxy/session.ts` + `src/proxy/store.ts` (`10ef2a5`) — the store is
+      a dependency-free durable file store (no cache, temp-file-plus-rename
+      writes), so the "SQLite" wording above is a planned shape, not what
+      landed; SQLite stays a named follow-up.
 - [ ] MCP server exposing `skill_state`, sharing the same Σ store.
 - [ ] Config file: port, upstreams, thresholds (mirror `options.json`), debug.
 - [ ] Claude Code setup doc: `ANTHROPIC_BASE_URL`; optional hook bridge for
@@ -305,13 +310,14 @@ the manifest fields are unread. Design is settled; these three gate the code.
 
 ## 9. Next step (user's call)
 
-1. **Phase 3, slice 2: the daemon skeleton and session identity.** `server.ts`
-   (HTTP reverse proxy, SSE passthrough, auth passthrough) plus `store.ts`
-   (SQLite over the Storage port) and the host-hint mapping that gives Claude
-   Code and Codex a session key. Session identity is the only genuinely novel
-   piece of Phase 3, because both landed adapters arrived with a native session
-   id while CC and Codex send plain HTTP. The codecs are done and need no host
-   to test; this is the part that does.
+1. ~~**Phase 3, slice 2: the daemon skeleton and session identity.**~~ **Landed**
+   (`10ef2a5`, `faa6dc3`). Session identity was the only genuinely novel piece of
+   Phase 3, because both landed adapters arrived with a native session id while
+   CC and Codex send plain HTTP. What remains of Phase 3: `mcp.ts` (the
+   `skill_state` MCP server sharing the store), `src/proxy/config.ts`, and the
+   two setup docs — then the manual three-quarters of the gate (live runs on CC
+   and Codex with a visible collapse, pairing-balance fuzz, daemon killed
+   mid-stream). The payload-erosion work is deferred below, by user decision.
 2. **Phase 3, slice 3+: mcp.ts, config, setup docs**, closing out the four-part
    gate (codec golden tests — done; live manual runs on CC and Codex with a
    visible collapse; pairing-balance fuzz; daemon killed mid-stream).
@@ -319,3 +325,74 @@ the manifest fields are unread. Design is settled; these three gate the code.
    shape, but Phase 3 is the chosen Tier 2 route and takes precedence.
 4. **Adjust the roadmap** — edit `docs/ROADMAP.md` first (it ships as its
    own commit; follow-ups amend or add doc commits).
+
+## 10. Deferred work — payload erosion (measured 2026-10-14; user-deferred)
+
+A live `/skillstate now` reported `context 417369 -> 458371 tokens` with "Σ
+already stands for turns 2-18; nothing left to collapse this pass" — a
+41,002-token **increase** on a pass that folded nothing. The reply's third line,
+"the next request carries the collapsed payload", was untrue on that pass and was
+removed in `82f9d1c`; the erosion itself was deliberately left untouched and is
+recorded here rather than fixed.
+
+### What was measured
+
+Four runs of the real `applyTransform` over synthetic transcripts, each final
+payload decomposed into policy, Σ and the kept window (scratch probe, since
+deleted; 4 chars ≈ 1 token):
+
+| transcript | tool result | before | after | kept window | tool-result share | Σ |
+|---|---|---|---|---|---|---|
+| control | 2,400 ch | 15,433 | 3,631 | 3,207 | 75% | 124 |
+| big | 120,000 ch | 603,433 | 121,231 | 120,807 | 99% | 124 |
+| huge | 400,000 ch | 2,003,433 | 401,231 | 400,807 | 99.9% | 124 |
+| live-like (18 turns, 3 passes) | 300,000 ch | 1,353,142 | 301,231 | 300,807 | 99.9% | 124 |
+
+The collapse folded the **identical** span — turns 2-17, 48 messages — at 15,433
+tokens and at 2,003,433 tokens. The mechanism is indifferent to payload size
+because `min` is a **turn count**, and it counted correctly every time. The
+erosion is entirely the window the collapse deliberately keeps, and in every big
+run that window is 99-99.9% tool-result value (user 445 tok, assistant 362,
+tool-call 42).
+
+**Limitation, stated because it bounds the conclusion:** Σ measured only 124
+tokens in all four runs, because the synthetic transcripts never accumulate
+state. That figure says nothing about the live 41,002-token Σ.
+
+### Two independent problems, two independent fixes
+
+| cause | share of the live 417K | fix |
+|---|---|---|
+| kept window's tool results | ~90% (~376K) | a result-size threshold the collapse can act on |
+| Σ's own accumulated text | ~10% (~41K) | condensation, or a size warning |
+
+Fixing only the smaller one leaves the payload essentially unchanged, so the
+condensation hypothesis — the obvious first answer — is refuted as the
+**primary** fix.
+
+### Option A — result-size threshold (the primary fix)
+
+- Needs its own design decisions first: a per-result cap; whether oversized
+  results are folded individually or replaced with a summary reference; and what
+  the model actually loses when a 300,000-char result becomes a pointer.
+- **Trap:** Σ is seeded from exactly the window that will survive and rendered
+  **once** at injection. Folding part of the kept window changes what survives,
+  so the seed and the fold must be ordered together — or the idempotence trap
+  reappears in a new form, and "idempotent" quietly means "the last two passes
+  agreed".
+
+### Option B — measure Σ's own growth first
+
+- The probe's 124 tokens proves nothing either way: drive the state store over
+  many accumulating turns and measure `render(Σ)` for a real figure.
+- Worth doing regardless, as the input to any size warning under Option A.
+
+### Also still open
+
+From `docs/optimization.md` (another session's report): F2 — 29 soft refusals
+because `state_patch` arrived as malformed JSON, 26 of them a single extra
+trailing brace, suggesting an enriched refusal naming the parse error and
+position plus a tolerant repair for that one class; F1's second half (validation
+after persistence); F3 (step fused with the payload); F4 (model-authored
+objective garble); F5 (ack ambiguity); F6 (Σ growth — priced in the table above);
+F7 (the installed copy lags the repo, so no fix here is live until reinstall).

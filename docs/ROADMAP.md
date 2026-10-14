@@ -389,7 +389,7 @@ condensation hypothesis — the obvious first answer — is refuted as the
 
 ### Also still open
 
-From `docs/optimization.md` (another session's report): F2 — 29 soft refusals
+From `docs/OPTIMIZATIONS.md` (another session's report): F2 — 29 soft refusals
 because `state_patch` arrived as malformed JSON, 26 of them a single extra
 trailing brace, suggesting an enriched refusal naming the parse error and
 position plus a tolerant repair for that one class; F1's second half (validation

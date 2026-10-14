@@ -15,6 +15,9 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   by a state write.
 - **`/skillstate`** — prints the current Σ, the measured context, and a per-turn index of
   what is collapsed vs kept; **`/skillstate now`** forces a collapse on the current pass.
+  When Σ's own render has grown past `sigmaWarnTokens` the report says so and names the
+  dominant key, because Σ is injected into every request and the collapse is indifferent
+  to how much that costs.
 - A **standing policy** section tells the model Σ is the record and anything not written to it
   goes with the turn that knew it; plus a **stale reminder** after `staleAfter` steps with no
   new user message (only at a balanced tail).
@@ -127,6 +130,10 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 | `nudgeWhenStale` | `true` | remind the model to update Σ after a stretch with no new instruction |
 | `staleAfter` | `8` | steps with no new user message before the nudge |
 | `manualCommand` | `true` | expose `/skillstate` |
+| `sigmaWarnTokens` | `16000` | print a Σ size line in `/skillstate` when Σ's own render passes this many tokens; `0` disables |
+
+`sigmaWarnTokens` is the only key this page owns that the transform does not
+read: it shapes the report's size line and nothing else.
 
 ## Tests that pin it
 

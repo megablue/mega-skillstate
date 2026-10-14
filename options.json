@@ -10,5 +10,8 @@
   "nudgeWhenStale": true,
   "staleAfter": 8,
   "manualCommand": true,
-  "debug": false
+  "debug": false,
+  "foldPatchInputs": true,
+  "maxResultChars": 4000,
+  "sigmaWarnTokens": 16000
 }

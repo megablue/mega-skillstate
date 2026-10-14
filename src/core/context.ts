@@ -34,6 +34,7 @@
  * @module mega-skillstate/context
  */
 
+import { erode, erosionNote } from "./erosion.ts"
 import { resolveThresholds, type ResolvedConfig } from "./config.ts"
 import { nudgeText, stateMessageText } from "./prompts.ts"
 import { EMPTY_HINTS, seedHints, type SeedHints } from "./seed.ts"
@@ -394,6 +395,22 @@ export async function applyTransform(deps: TransformDeps, input: TransformInput)
       )
     }
   }
+
+  // --- 7. Erosion: trim what the live turn has stopped needing. ----------------
+  //
+  // After the collapse, because it is measured against the payload this pass
+  // ships: the live turn is the newest turn the host handed over, and the seed
+  // and the fold-span arithmetic have already read the raw content. Both cuts
+  // are content-only — a message is replaced, never removed, and never touched
+  // in place — so the caller's transcript survives byte for byte, which is the
+  // rule this whole module obeys.
+  const eroded = erode(messages, descriptor.record, {
+    foldPatchInputs: config.foldPatchInputs,
+    maxResultChars: config.maxResultChars,
+  })
+  messages.splice(0, messages.length, ...eroded.messages)
+  const erosionLine = erosionNote(eroded.report)
+  if (erosionLine !== undefined) notes.push(erosionLine)
 
   // --- 8. A reminder, only when Σ has gone stale, and only at a balanced tail. -------
   let nudged = false

@@ -10,6 +10,7 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 - Injects Σ as one message (`role: user`, id `mega_state`) placed **after the first user instruction**, so the protected head stays first.
 - Collapses the superseded prefix (turns older than `keepRecentTurns`, once past `min`) into Σ; the collapsed span is **durable** (`state/<sessionID>`) and re-applied on every request.
 - Seeds `files`/`cwd`/`activeFiles`/`step` from the surviving window, then **renders Σ once** (see the ordering trap).
+- **Erodes the kept window's content** (`src/core/erosion.ts`, step 7): an old turn's `skill_state` patch body becomes a marker, and an oversized old result is capped to head + marker + tail.
 - Appends a stale-nudge only at a **balanced tail** (`inFlight === 0`).
 
 ## Map
@@ -17,6 +18,7 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 - `src/core/context.ts` — the host-free half of the transform: `applyTransform` (async), `describeContext` (async), `measureContext`, `roughTokens`, `messageChars`, `estimateTokens`, `windowOf`, `stripInjected`, `safeBalance`, `lastUserId`; the Σ message and seed renderers (`stateMessage`, `seedPatch`); types `TransformDeps` (now carries `storage`), `TransformInput`, `ContextReport`, `ContextDescriptor`. It names no host: it takes plain values in and returns plain values out.
 - `src/adapters/opencode/context.ts` — the three host-coupled lines only: `runContextTransform` (async), `SessionContextEventLike`, `ToolWireEntry`. It pushes `SECTION_TEXT` into `event.system` (deduped by exact text, so a provider prefix cache stays warm), writes the tool's wire-offer into `event.tools` (the registry is not the request, and a tool only reachable through `tool.transform` is a tool the model can never call), reads `sessionID`, and leaves a payload with none alone. It re-exports the core names above, so they still resolve from here.
 - `src/core/view.ts` — ported safe-cut helpers: `viewOf`, `turnMap`, `turnsOf`, `balanceCuts`, `selectPrunableRange`, `firstSelectableIndex`; injected-id helpers `INJECTED_ID_PREFIX` (`mega_`), `isInjectedMessage`, `STATE_MESSAGE_ID`, `valueText`.
+- `src/core/erosion.ts` — the two content-only cuts of step 7, host-free: `erode(messages, record, {foldPatchInputs, maxResultChars})` → `{messages, report}`; `foldPatches`, `capResults`; the marker text `foldedPatchMarker` / `cappedResultText`; `erosionNote` (absent when nothing was touched). It replaces messages, never splices and never mutates the originals, so pairing and the seed are untouched.
 - `src/core/prompts.ts` — `SECTION_TEXT` (standing policy), `nudgeText`, `stateMessageText`.
 - `src/adapters/opencode/index.ts` — registers the hook inside `try/catch`; wires `windows` (model windows), the bounded `lastRequest` map, and `ctx.storage` into the transform's deps.
 - `src/core/types.ts` — the message vocabulary the transform reads, plus `messageOf`.
@@ -58,13 +60,34 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 | `protectFirstUserMessage` | `true` | never collapse the first user instruction |
 | `allowSubagentSessions` | `false` | manage sub-agent (child) sessions |
 | `nudgeWhenStale` / `staleAfter` | `true` / `8` | steps with no new user message before a nudge |
+| `foldPatchInputs` | `true` | replace an old turn's `skill_state` patch body with a marker (Σ already renders it) |
+| `maxResultChars` | `4000` | cap an old turn's tool-result value; `0` disables; `glob` exempt (the seed reads one) |
 | `debug` | `false` | log the pass to stderr |
+
+`sigmaWarnTokens` (`16000`, `0` disables) belongs to
+[skill-state-controls.md](skill-state-controls.md): it only shapes the
+`/skillstate` report's Σ size line, so the page that owns the command owns the
+key.
 
 ## Tests that pin it
 
 `scripts/smoke.mjs` (`npm run smoke`) — collapse numbers (61→14), Σ at `messages[1]`,
 pairs intact after every phase, **idempotence (two passes, byte-identical)**, `collapseOlder:false`
 and subagent guards, stale reminder only at a balanced tail.
+
+**Payload erosion** — `buildErosionTranscript(8)` beside `buildTranscript`, whose
+turns carry a 3 KB `skill_state` patch, a 6 KB read result and a small glob
+listing. Four rows: `erosion` (3 old patches folded to markers, 3 results capped
+to the budget, **the live call left whole** — the step in flight keeps its
+working memory), `erosion idempotence` (a second pass is byte-identical), `erosion
+config` (both switches off leave every body whole and the notes silent), and the
+glob result never capped, because the seed extracts its file list from one. The
+fold only rewrites a **plain-object** `state_patch`, which is what makes it
+idempotent: a marker is a string, so it can never be folded twice.
+
+**Σ size warning** — the `sigma warning` row: a Σ past the 16,000-token line
+prints a line naming the dominant key (`findings`), and a small Σ prints nothing
+rather than a zero. Pinned on both adapters' report path.
 
 **`pairing balance fuzz`** — the pairing invariant over 400 seeded transcripts nobody
 wrote by hand: several calls in one message, two results in one message, a call and its

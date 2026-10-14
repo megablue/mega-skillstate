@@ -107,6 +107,71 @@ function buildTranscript(turns = 20) {
   return messages
 }
 
+/**
+ * A transcript shaped like the sessions the erosion pass was measured against:
+ * per turn, a `skill_state` call carrying a large patch, its small ack, a `read`
+ * call returning a large result, and a `glob` listing the seed depends on.
+ *
+ * The newest turn is the live one: it holds the step being taken, and nothing in
+ * it may be trimmed. Everything older is fair game.
+ */
+function buildErosionTranscript(turns = 8) {
+  const messages = [
+    { id: "u_head", role: "user", content: [{ type: "text", text: filler("the assignment", 900) }] },
+  ]
+  for (let turn = 1; turn <= turns; turn += 1) {
+    const stateCall = "c_state_" + turn
+    const readCall = "c_read_" + turn
+    const globCall = "c_glob_" + turn
+    messages.push({
+      id: "u_" + turn,
+      role: "user",
+      content: [{ type: "text", text: filler("turn " + turn + " instruction", 220) }],
+    })
+    messages.push({
+      id: "a_" + turn,
+      role: "assistant",
+      content: [
+        { type: "reasoning", text: filler("reasoning for turn " + turn, 320) },
+        {
+          type: "tool-call",
+          id: stateCall,
+          name: "skill_state",
+          input: {
+            state_patch: { findings: { ["finding-" + turn]: filler("finding " + turn, 3000) } },
+            step: turn,
+            summary: "did turn " + turn,
+          },
+        },
+        { type: "tool-result", id: stateCall, name: "skill_state", result: { type: "text", value: "skill-state updated -> step " + turn } },
+      ],
+    })
+    messages.push({
+      id: "a2_" + turn,
+      role: "assistant",
+      content: [
+        { type: "tool-call", id: readCall, name: "read", input: { file_path: "src/file" + turn + ".ts", limit: 200 } },
+      ],
+    })
+    messages.push({
+      id: "r2_" + turn,
+      role: "tool",
+      content: [{ type: "tool-result", id: readCall, name: "read", result: { type: "text", value: filler("result of turn " + turn, 6000) } }],
+    })
+    messages.push({
+      id: "a3_" + turn,
+      role: "assistant",
+      content: [{ type: "tool-call", id: globCall, name: "glob", input: { pattern: "src/*.ts" } }],
+    })
+    messages.push({
+      id: "r3_" + turn,
+      role: "tool",
+      content: [{ type: "tool-result", id: globCall, name: "glob", result: { type: "text", value: "src/file" + turn + ".ts\nsrc/other" + turn + ".ts\n" } }],
+    })
+  }
+  return messages
+}
+
 /** A `context` event, as the host builds one. */
 function buildEvent(messages) {
   return { sessionID: "ses_smoke", agent: "build", model: MODEL, system: [], messages, tools: {} }
@@ -2229,6 +2294,181 @@ console.log("")
     "pairing balance fuzz",
     transcripts + " transcript(s), " + safe + " safe cut(s), " + unsafe + " unsafe confirmed, " + collapsed + " collapse(s) whole",
   )
+}
+
+// ---------------------------------------------------------------------------
+// Payload erosion: what the live turn has stopped needing, trimmed from the
+// window the collapse deliberately keeps.
+//
+// ROADMAP section 10 deferred this because a synthetic probe said the kept
+// window was 99-99.9% tool-result value. Measured against the real sessions in
+// opencode.db it is not: in PLO1, JEV, phase2 and refactor the window is a
+// mixture, and the largest single component is the model's own skill_state
+// patch bodies (38-52% of window chars) - which Sigma has already absorbed by
+// the time the payload ships. So the primary lever is folding those, and the
+// result cap is the second one.
+//
+// Three invariants are pinned, because each is a way this could be wrong: the
+// live turn is never touched, a second pass is byte-identical, and the pairing
+// arithmetic survives a rewrite that only ever changes part *content*.
+// ---------------------------------------------------------------------------
+{
+  const erodeHost = createHost()
+  const erodeDispose = await plugin.default.setup(erodeHost.context)
+  const erodeEvent = {
+    sessionID: "ses_erosion",
+    agent: "build",
+    model: MODEL,
+    system: [],
+    tools: {},
+    messages: buildErosionTranscript(8),
+  }
+  const erodeHook = erodeHost.contextHooks[0]
+
+  // 8 turns: the collapse folds turns 1-4, the window keeps 5-8, and turn 8 is
+  // the live one. So exactly three patches fold and three results cap.
+  const report = await erodeHook(erodeEvent)
+  const shipped = erodeEvent.messages
+
+  // (a) Sigma still sits immediately after the protected head, and the live turn
+  // is the tail, so the boundary was not disturbed by the rewrite.
+  assert.equal(shipped[0].id, "u_head", "the protected head is still first")
+  assert.equal(shipped[1].id, "mega_state", "Sigma is injected at messages[1]")
+  checkPairing(shipped, "the payload after erosion")
+
+  // (b) Old-turn patches became markers; the live turn's patch is untouched.
+  const asJson = (value) => JSON.stringify(value)
+  const stateCalls = shipped
+    .flatMap((message) => message.content ?? [])
+    .filter((part) => part.type === "tool-call" && part.name === "skill_state")
+  const liveCall = shipped.find((m) => m.id === "a_8").content.find((p) => p.name === "skill_state")
+  assert.ok(liveCall !== undefined, "the live turn's own skill_state call is still there")
+  assert.equal(
+    typeof liveCall.input.state_patch,
+    "object",
+    "the live turn's patch body is left verbatim: it is the working memory of the step in flight",
+  )
+  const oldCalls = stateCalls.filter((call) => call !== liveCall)
+  assert.equal(oldCalls.length, 3, "exactly the three older window turns folded: " + oldCalls.length)
+  for (const call of oldCalls) {
+    assert.equal(typeof call.input.state_patch, "string", "an old patch body became a marker")
+    assert.ok(call.input.state_patch.startsWith("(folded into Sigma)"), call.input.state_patch)
+    // The step and summary arguments survive, because they are not the payload.
+    assert.equal(typeof call.input.step, "number", "step is an argument, not part of the body")
+  }
+
+  // (c) Oversized results were capped; the live one and the glob were not. The
+  // glob is exempt because the seed extracts its file list from one, so capping
+  // it would change what Sigma says.
+  const liveResult = shipped.find((m) => m.id === "r2_8").content[0]
+  assert.equal(liveResult.result.value.length, 6000, "the live turn's result is left whole")
+  for (const id of ["r2_5", "r2_6", "r2_7"]) {
+    const result = shipped.find((m) => m.id === id).content[0]
+    assert.ok(result.result.value.length <= 4000, id + " was capped to the budget: " + result.result.value.length)
+    assert.ok(result.result.value.includes("[... omitted"), id + " names how much it omitted")
+  }
+  const globResult = shipped.find((m) => m.id === "r3_5").content[0]
+  assert.equal(globResult.result.value, "src/file5.ts\nsrc/other5.ts\n", "a glob listing is never capped: the seed reads one")
+  assert.ok(report.notes.some((note) => note.startsWith("folded 3 old patch input")), report.notes.join(" | "))
+  assert.ok(report.notes.some((note) => note.includes("capped 3 old result")), report.notes.join(" | "))
+  row("erosion", "3 old patches folded, 3 results capped, the live call left whole")
+
+  // (d) Idempotence: the same array, twice, byte for byte. A folded marker is a
+  // string and the fold only rewrites plain objects, and a capped value is
+  // already under the cap, so neither can fire twice.
+  const erodeAgain = await erodeHook(erodeEvent)
+  checkPairing(erodeEvent.messages, "the payload after a second erosion pass")
+  assert.equal(asJson(erodeEvent.messages), asJson(shipped), "a second pass is byte-identical")
+  row("erosion idempotence", "two passes, byte-identical payloads")
+
+  // (e) The two cuts are independently switchable, and "off" must be a real
+  // absence rather than a pass that folds nothing.
+  const offHost = createHost()
+  offHost.context.options = { ...OPTIONS, foldPatchInputs: false, maxResultChars: 0 }
+  const offDispose = await plugin.default.setup(offHost.context)
+  const offEvent = {
+    sessionID: "ses_erosion_off",
+    agent: "build",
+    model: MODEL,
+    system: [],
+    tools: {},
+    messages: buildErosionTranscript(8),
+  }
+  const offReport = await offHost.contextHooks[0](offEvent)
+  const offCalls = offEvent.messages
+    .flatMap((m) => m.content ?? [])
+    .filter((part) => part.type === "tool-call" && part.name === "skill_state")
+  assert.ok(
+    offCalls.every((call) => typeof call.input.state_patch === "object"),
+    "foldPatchInputs: false leaves every patch body whole",
+  )
+  const offResult = offEvent.messages.find((m) => m.id === "r2_5").content[0]
+  assert.equal(offResult.result.value.length, 6000, "maxResultChars: 0 leaves every result whole")
+  assert.ok(!offReport.notes.some((note) => note.includes("folded")), "and the report claims nothing: " + offReport.notes.join(" | "))
+  row("erosion config", "foldPatchInputs and maxResultChars both switch off, notes stay silent")
+  await offDispose().catch(() => {})
+  await erodeDispose().catch(() => {})
+}
+
+// ---------------------------------------------------------------------------
+// The Sigma size line: the one erosion the collapse cannot see.
+//
+// Sigma is injected into every request, so its own growth is charged to every
+// request. On the measured live case Sigma was ~41,000 tokens of a 458,000
+// token payload - a tenth of the window it was bounding. The line names the
+// dominant key, because "consolidate" without saying what dominates is advice
+// the model cannot act on.
+// ---------------------------------------------------------------------------
+{
+  const sigmaHost = createHost()
+  const sigmaDispose = await plugin.default.setup(sigmaHost.context)
+  const sigmaEvent = {
+    sessionID: "ses_sigma_warn",
+    agent: "build",
+    model: MODEL,
+    system: [],
+    tools: {},
+    messages: buildTranscript(6),
+  }
+  await sigmaHost.contextHooks[0](sigmaEvent)
+  // A findings blob large enough to cross the 16,000-token line on its own.
+  await sigmaHost.tools[0].execute(
+    { state_patch: { findings: { "big-finding": filler("finding", 90000) } }, summary: "a very large Sigma" },
+    {
+      sessionID: "ses_sigma_warn",
+      agent: "build",
+      messageID: "msg_sigma",
+      id: "call_sigma",
+      signal: new AbortController().signal,
+    },
+  )
+  await sigmaHost.commands[0].execute({ sessionID: "ses_sigma_warn", prompt: {} })
+  const printed = sigmaHost.prompts[sigmaHost.prompts.length - 1].text
+  assert.ok(printed.includes("over the 16000-token line"), "a Sigma past the threshold is named: " + printed.slice(-300))
+  assert.ok(printed.includes("findings"), "and the dominant key is named too")
+
+  // Under the threshold, the line is absent rather than printed with a zero.
+  const quietHost = createHost()
+  const quietDispose = await plugin.default.setup(quietHost.context)
+  const quietEvent = {
+    sessionID: "ses_sigma_quiet",
+    agent: "build",
+    model: MODEL,
+    system: [],
+    tools: {},
+    messages: buildTranscript(6),
+  }
+  await quietHost.contextHooks[0](quietEvent)
+  await quietHost.tools[0].execute(
+    { state_patch: { objective: "something small" }, summary: "a small Sigma" },
+    { sessionID: "ses_sigma_quiet", agent: "build", messageID: "msg_q", id: "call_q", signal: new AbortController().signal },
+  )
+  await quietHost.commands[0].execute({ sessionID: "ses_sigma_quiet", prompt: {} })
+  const quiet = quietHost.prompts[quietHost.prompts.length - 1].text
+  assert.ok(!quiet.includes("-token line"), "a Sigma under the threshold prints no warning: " + quiet.slice(-200))
+  row("sigma warning", "printed past 16000 tokens with its dominant key, silent below it")
+  await quietDispose().catch(() => {})
+  await sigmaDispose().catch(() => {})
 }
 
 // ---------------------------------------------------------------------------

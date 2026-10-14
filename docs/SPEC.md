@@ -29,6 +29,24 @@ It is for long agent sessions where append-only history would otherwise grow
 quadratically. In practice, collapsing turns into Σ is **gated by turn count**
 (`min` to start, `keepRecentTurns` kept), not by a token budget.
 
+Because the window itself can still be enormous within those turns, the plugin
+also **erodes the content of the window's older turns**: a `skill_state` call's
+patch body from a turn that is no longer the live one is replaced by a marker
+naming the keys it carried (Σ already renders the merged result, and the call's
+own result says which keys moved), and a tool result over `maxResultChars` is
+reduced to its head and tail with a marker saying how much was omitted. The
+**live turn is never touched** — it is the step being taken. Both cuts change
+only content, never which messages exist or how a tool call is paired with its
+result, so the conversation the model sees stays well formed; folding is
+idempotent, because a folded patch body is a string and only a plain object is
+ever folded. A `glob` result is exempt, since the file list Σ seeds itself from
+is read out of one. Both cuts are user-visible behavior and both have an
+explicit off switch (`foldPatchInputs`, `maxResultChars: 0`).
+
+When Σ has grown past `sigmaWarnTokens`, `/skillstate` says so and names the key
+that dominates it, because Σ is injected into every request and the collapse is
+indifferent to how much that costs.
+
 ## Compaction
 
 When the host needs a compaction message, the plugin answers it with Σ instead of

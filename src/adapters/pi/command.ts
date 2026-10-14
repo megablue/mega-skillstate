@@ -97,7 +97,7 @@ export function createPiSkillStateCommand(options: PiSkillStateCommandOptions): 
         return
       }
 
-      reply(stateReport(await describeFor(sessionID, payload)) + NOW_HINT)
+      reply(stateReport(await describeFor(sessionID, payload), options.deps.config.sigmaWarnTokens) + NOW_HINT)
     },
   }
 }

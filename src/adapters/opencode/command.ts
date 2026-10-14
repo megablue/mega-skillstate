@@ -96,7 +96,9 @@ export function createSkillStateCommand(options: SkillStateCommandOptions): Comm
         return
       }
 
-      await say(stateReport(await describeFor(sessionID, payload)) + NOW_HINT)
+      await say(
+        stateReport(await describeFor(sessionID, payload), options.deps.config.sigmaWarnTokens) + NOW_HINT,
+      )
     },
   }
 }

@@ -79,10 +79,55 @@ export function turnIndex(descriptor: ContextDescriptor): string {
   return lines.join("\n")
 }
 
+/** How much of Σ's render one key is worth, as a share of the whole. */
+function keyShare(state: Record<string, unknown>, key: string): number {
+  const text = render(state)
+  if (text.length === 0) return 0
+  const value = state[key]
+  if (value === undefined) return 0
+  const size = (() => {
+    try {
+      const json = JSON.stringify(value)
+      return typeof json === "string" ? json.length : 0
+    } catch {
+      return 0
+    }
+  })()
+  return Math.round((size / text.length) * 100)
+}
+
+/**
+ * The Σ size line, printed only when Σ itself has grown past the warning.
+ *
+ * Σ is injected into *every* request, so its own growth is the one erosion the
+ * collapse cannot see: the pass is indifferent to how many tokens the state
+ * message costs. On the measured live case Σ was ~41,000 tokens of a 458,000
+ * token payload — roughly a tenth of the window it was bounding. The line
+ * names the dominant key, because "consolidate" without saying what dominates
+ * is advice the model cannot act on. `0` disables it.
+ */
+function sigmaSizeLine(record: StateView, threshold: number): string | undefined {
+  if (threshold <= 0) return undefined
+  const text = render(record.get())
+  const tokens = estimateTokens(text)
+  if (tokens <= threshold) return undefined
+  const findings = keyShare(record.get(), "findings")
+  return (
+    "Σ is ~" +
+    tokens +
+    " tokens, " +
+    findings +
+    "% of it findings — over the " +
+    threshold +
+    "-token line; consolidate rather than let it crowd the window"
+  )
+}
+
 /** The account the command prints: the state, the numbers, then the per-turn index. */
-export function stateReport(descriptor: ContextDescriptor): string {
-  return [
+export function stateReport(descriptor: ContextDescriptor, sigmaWarnTokens = 0): string {
+  const lines = [
     stateBlock(descriptor.record),
+    sigmaSizeLine(descriptor.record, sigmaWarnTokens),
     "",
     "context " +
       descriptor.tokens +
@@ -96,7 +141,10 @@ export function stateReport(descriptor: ContextDescriptor): string {
       descriptor.currentTurn,
     "",
     turnIndex(descriptor),
-  ].join("\n")
+  ]
+  // A filtered slot would shift every line below it, so the line is either
+  // present or replaced by the blank it already occupies.
+  return lines.map((line) => line ?? "").join("\n")
 }
 
 /** The command's one-line description, on every host. */

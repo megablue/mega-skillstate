@@ -60,6 +60,30 @@ export const DEFAULT_CONFIG = {
   manualCommand: true,
   /** Log the transform's decision. */
   debug: false,
+  /**
+   * Replace the body of an old turn's `skill_state` patch with a marker.
+   *
+   * The collapse bounds a session by turn count, so a collapsed payload can
+   * still be enormous; in the measured live case the kept window was dominated
+   * by the model's own patch bodies, which Σ had already absorbed. The state
+   * message in the same payload renders the merged result, so the patch text is
+   * the redundancy this removes. The live turn is never touched.
+   */
+  foldPatchInputs: true,
+  /**
+   * Cap an old turn's tool-result value at this many characters. 0 disables.
+   *
+   * A huge result is kept as head + omission marker + tail, so what survives is
+   * the part a reader checks first. A glob result is exempt: the deterministic
+   * seed extracts its file list from one, and trimming it would change what Σ
+   * says. The live turn is never touched.
+   */
+  maxResultChars: 4000,
+  /**
+   * Print a Σ size line in `/skillstate` when Σ's own render passes this many
+   * tokens. 0 disables the line.
+   */
+  sigmaWarnTokens: 16000,
 }
 
 /** The resolved policy: complete, deeply frozen, and safe to hold for a session's lifetime. */
@@ -76,6 +100,9 @@ export interface ResolvedConfig {
   readonly staleAfter: number
   readonly manualCommand: boolean
   readonly debug: boolean
+  readonly foldPatchInputs: boolean
+  readonly maxResultChars: number
+  readonly sigmaWarnTokens: number
 }
 
 /** The two turn gates the transform reads together. */
@@ -225,6 +252,9 @@ export function resolveConfig(raw?: unknown): ResolvedConfig {
     staleAfter: integer(config.staleAfter, "staleAfter", DEFAULT_CONFIG.staleAfter, 1),
     manualCommand: bool(config.manualCommand, "manualCommand", DEFAULT_CONFIG.manualCommand),
     debug: bool(config.debug, "debug", DEFAULT_CONFIG.debug),
+    foldPatchInputs: bool(config.foldPatchInputs, "foldPatchInputs", DEFAULT_CONFIG.foldPatchInputs),
+    maxResultChars: integer(config.maxResultChars, "maxResultChars", DEFAULT_CONFIG.maxResultChars, 0),
+    sigmaWarnTokens: integer(config.sigmaWarnTokens, "sigmaWarnTokens", DEFAULT_CONFIG.sigmaWarnTokens, 0),
   }
   return frozen(resolved)
 }

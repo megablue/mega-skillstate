@@ -75,8 +75,9 @@ or warning noise on both CI runners. SQLite is a named follow-up, not a silent
 omission.
 
 **Three store decisions, each a failure that has already happened somewhere.**
-Nothing is cached, because the MCP server in the next slice may be a separate
-process sharing this directory and a cache would be a correctness hazard. Every
+Nothing is cached, because the MCP server (`src/proxy/mcp.ts`) is a real
+separate-process case — its own `http.Server` and its own stdio reader over
+this same directory — and a cache would be a correctness hazard. Every
 write is a rename — a temporary file beside the target, then over it — because
 an interrupted write leaves truncated JSON, the next restart reads it as
 garbage, `load` refuses it, and the session silently resumes empty. And the key

@@ -1761,6 +1761,192 @@ console.log("")
   }
 }
 
+// ---------------------------------------------------------------------------
+// skill_state over MCP: the boundary with no socket at its interesting end.
+//
+// The MCP server is the only proxy module whose behaviour is not a process
+// boundary. JSON-RPC dispatch is a pure function of a frame and a session key,
+// and both transports are thin readers of a socket around that, so the pin
+// calls the dispatcher directly. That is deliberate: it needs no SDK to stub,
+// and a protocol defect that only a live client would ever notice - a
+// handshake that forgets its capabilities, a notification answered with a
+// frame, a write that reports success and persists nothing - would otherwise
+// wait for the manual live runs in the Phase 3 gate to surface it.
+//
+// The write-through case is the one that must be real. `writeSkillState`
+// returns a promise either way, so asserting on the reply alone would pass a
+// tool that answered correctly and wrote to nowhere. The store here is a
+// durable one on its own directory, checked afterwards, and the session key is
+// the one constant that must match between the MCP call and the check - which
+// is also the point of the design: an MCP write and the daemon's collapse
+// reach the same key, so this pin proves the two agree.
+//
+// Every call is awaited. An unawaited-async assertion is a green row that
+// means nothing, and that exact defect cost an afternoon on the Pi path once
+// already.
+// ---------------------------------------------------------------------------
+{
+  const mcpModule = await load("src/proxy/mcp.ts")
+  const stateModule = await load("src/core/state.ts")
+  const skillCore = await load("src/core/skill-state.ts")
+  assert.equal(typeof mcpModule.dispatchMcp, "function", "the MCP server must export its dispatcher")
+  assert.equal(typeof mcpModule.handleMcpLine, "function", "and its stdio seam")
+  assert.equal(typeof mcpModule.createMcpServer, "function", "and its HTTP factory")
+  assert.equal(typeof mcpModule.createMcpStdio, "function", "and its stdio factory")
+
+  const storeModule = await load("src/proxy/store.ts")
+  const storeDir = mkdtempSync(join(tmpdir(), "mega-skillstate-mcp-"))
+  const storage = storeModule.createProxyStore({
+    dir: storeDir,
+    log: (line) => row("proxy mcp store log", line),
+  })
+  const mcpSession = "ses_mcp_pin"
+  const mcpOptions = { storage, fallbackSession: "mcp-shared", log: (line) => row("proxy mcp log", line) }
+
+  try {
+    // --- The handshake answers what a client asks, and nothing else. ---------
+    const initialized = await mcpModule.dispatchMcp(
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+      mcpSession,
+      mcpOptions,
+    )
+    assert.equal(initialized.result.protocolVersion, "2025-06-18", "initialize echoes a revision this server speaks")
+    assert.ok(initialized.result.capabilities.tools, "and advertises the tools it has")
+    assert.equal(initialized.result.serverInfo.name, "mega-skillstate", "naming itself")
+
+    const negotiated = await mcpModule.dispatchMcp(
+      { jsonrpc: "2.0", id: 2, method: "initialize", params: { protocolVersion: "1999-01-01" } },
+      mcpSession,
+      mcpOptions,
+    )
+    assert.ok(
+      negotiated.result.protocolVersion !== "1999-01-01",
+      "a revision this server does not speak is answered with one it does, rather than echoed",
+    )
+
+    // A notification earns no reply at all. MCP's handshake is half of them, so
+    // answering one would desynchronise a client waiting for nothing.
+    const notified = await mcpModule.dispatchMcp({ jsonrpc: "2.0", method: "notifications/initialized" }, mcpSession, mcpOptions)
+    assert.equal(notified, undefined, "a notification earns no reply")
+
+    const pinged = await mcpModule.dispatchMcp({ jsonrpc: "2.0", id: 3, method: "ping" }, mcpSession, mcpOptions)
+    assert.equal(Object.keys(pinged.result).length, 0, "ping answers an empty result")
+
+    // --- The tool list is the core's own, which is the point. ----------------
+    const listed = await mcpModule.dispatchMcp({ jsonrpc: "2.0", id: 4, method: "tools/list" }, mcpSession, mcpOptions)
+    assert.equal(listed.result.tools.length, 1, "exactly one tool is exposed")
+    const tool = listed.result.tools[0]
+    assert.equal(tool.name, skillCore.TOOL_NAME, "and it is the same tool every other host registers")
+    assert.equal(
+      JSON.stringify(tool.inputSchema),
+      JSON.stringify(skillCore.TOOL_INPUT),
+      "with the core's own input schema, so a fenced payload reaches the parser rather than the door",
+    )
+    assert.equal(JSON.stringify(tool.outputSchema), JSON.stringify(skillCore.TOOL_OUTPUT), "and its output schema")
+
+    // --- The write reaches Sigma. -------------------------------------------
+    // The stored key is the one constant that must match between this call and
+    // the check below. It is also what makes the two halves agree: an MCP write
+    // and the daemon's collapse address the same key, so this pin proves the
+    // design rather than a coincidence of naming.
+    const stateKey = stateModule.stateKey(mcpSession)
+    const written = await mcpModule.dispatchMcp(
+      {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/call",
+        params: { name: skillCore.TOOL_NAME, arguments: { state_patch: { objective: "the MCP write reached Sigma" }, summary: "mcp pin" } },
+      },
+      mcpSession,
+      mcpOptions,
+    )
+    assert.equal(written.result.isError, false, "a well-formed patch is not an error")
+    assert.equal(written.result.structuredContent.kind, "state", "and the core reports what changed")
+    assert.ok(written.result.content.length > 0 && typeof written.result.content[0].text === "string", "with the ack the model reads")
+    const persisted = await storage.get(stateKey)
+    assert.ok(persisted, "the write reached the durable store, not a returning promise")
+    assert.equal(
+      persisted.state.objective,
+      "the MCP write reached Sigma",
+      "and it is the record a later pass would read",
+    )
+    assert.equal(persisted.summary, "mcp pin", "with the one-line note the runtime carries")
+
+    // --- A malformed patch is refused, and Sigma keeps what it had. -----------
+    const refused = await mcpModule.dispatchMcp(
+      { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: skillCore.TOOL_NAME, arguments: { state_patch: "not json {" } } },
+      mcpSession,
+      mcpOptions,
+    )
+    assert.equal(refused.result.isError, true, "a malformed patch is an error")
+    assert.equal(refused.result.structuredContent.kind, "error", "and says so structurally")
+    const unchanged = await storage.get(stateKey)
+    assert.equal(
+      unchanged.state.objective,
+      "the MCP write reached Sigma",
+      "while Sigma keeps exactly what it had",
+    )
+
+    // --- Errors are JSON-RPC errors, which is what a client reads. -----------
+    const unknownTool = await mcpModule.dispatchMcp(
+      { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "not_a_tool" } },
+      mcpSession,
+      mcpOptions,
+    )
+    assert.equal(unknownTool.error.code, -32602, "an unknown tool is invalid params")
+
+    const unknownMethod = await mcpModule.dispatchMcp({ jsonrpc: "2.0", id: 8, method: "no_such_method" }, mcpSession, mcpOptions)
+    assert.equal(unknownMethod.error.code, -32601, "an unknown method is method not found")
+
+    const badFrame = await mcpModule.dispatchMcp({ jsonrpc: "2.0", id: 9, method: 42 }, mcpSession, mcpOptions)
+    assert.equal(badFrame.error.code, -32600, "a frame whose method is not a string is an invalid request")
+
+    // --- The stdio seam: the line boundary is the frame boundary. -----------
+    const piped = await mcpModule.handleMcpLine(JSON.stringify({ jsonrpc: "2.0", id: 10, method: "ping" }), mcpSession, mcpOptions)
+    const answered = JSON.parse(piped)
+    assert.equal(answered.result !== undefined && answered.error === undefined, true, "a line answers as a frame")
+    assert.equal(Object.keys(answered.result).length, 0, "with the same body the dispatcher gives")
+
+    const pipedNotification = await mcpModule.handleMcpLine(
+      JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+      mcpSession,
+      mcpOptions,
+    )
+    assert.equal(pipedNotification, undefined, "and a notification line earns no line back")
+
+    const pipedParse = JSON.parse(await mcpModule.handleMcpLine("{not json", mcpSession, mcpOptions))
+    assert.equal(pipedParse.error.code, -32700, "an unparseable line is a parse error")
+
+    const pipedBatch = JSON.parse(await mcpModule.handleMcpLine("[]", mcpSession, mcpOptions))
+    assert.equal(pipedBatch.error.code, -32600, "a batched line is refused rather than half-answered")
+
+    // --- The two places a session can come from, and what each is used for. ---
+    // The identity derivation is the store's, reused verbatim, which is the
+    // design: a write through MCP must land under the key the collapse reads
+    // from. So the pin asserts the precedence lands where the daemon's does.
+    const identified = await mcpModule.dispatchMcp(
+      {
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: { name: skillCore.TOOL_NAME, arguments: { state_patch: { objective: "written under the daemon's key" } } },
+      },
+      "ses_daemon_shared",
+      mcpOptions,
+    )
+    assert.equal(identified.result.isError, false, "a write under the daemon's own fallback key succeeds")
+    assert.equal(
+      (await storage.get(stateModule.stateKey("ses_daemon_shared"))).state.objective,
+      "written under the daemon's key",
+      "and it is filed under that key, so a later collapse from the daemon reads it",
+    )
+
+    row("proxy mcp", "JSON-RPC dispatch pinned, the write through Sigma durable under the daemon's key")
+  } finally {
+    rmSync(storeDir, { recursive: true, force: true })
+  }
+}
+
 await dispose().catch(() => {})
 rmSync(scratchHome, { recursive: true, force: true })
 console.log("\nsmoke: ok")

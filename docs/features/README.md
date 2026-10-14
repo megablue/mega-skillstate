@@ -23,6 +23,7 @@ refactors with no behavior, mechanism, config or test change need no edit.
 | Configuration | [configuration.md](configuration.md) | a setting does not take effect; where a config value comes from; the user-level `mega-skillstate.json`; the plugin writing a config file on first run; an unknown key refusing to load |
 | Proxy codecs | [proxy-codecs.md](proxy-codecs.md) | a proxy payload is not what the model sent; a round trip fails on key order; `arguments` came back re-serialised; an encrypted reasoning item or a thinking block reached the core; strip/restore; the `Codec` port |
 | Proxy session & store | [proxy-session-store.md](proxy-session-store.md) | a proxy request arrives with no session id; which session a request belongs to; two conversations sharing one Σ; Σ resumes empty after a restart; a key that becomes a filename; a truncated record |
+| Proxy MCP server | [proxy-mcp.md](proxy-mcp.md) | `skill_state` over MCP; an MCP write lands under a key no request reads; a batch gets no reply; `mcp-session-id` is being used as the Σ key; JSON-RPC needs pinning; a MCP client hangs on `initialize` |
 
 <!-- One row per feature page (added as pages land). Keep "Read when" a trigger
 someone would search for — the file, the symbol, the symptom — not a

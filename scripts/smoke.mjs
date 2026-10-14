@@ -1530,13 +1530,22 @@ console.log("")
     assert.equal(made.notifications.length, 2, "the plain command replied too")
     assert.ok(made.notifications[1].message.includes("Σ"), "the plain reply prints Σ")
 
+    // The argument words are the core's, so the second adapter reaches the read path with
+    // nothing of its own but the string: `archive` here is parseAsk's, not a Pi branch.
+    await commandDefinition.handler("archive", made.makeCtx())
+    assert.equal(made.notifications.length, 3, "the listing replies through the same channel")
+    assert.ok(
+      made.notifications[2].message.includes("archive"),
+      "and reads the same argument words: " + made.notifications[2].message.slice(0, 120),
+    )
+
     // The guard is the reason a notify is written behind mode/hasUI at all: a
     // surface with no UI is a write to a channel nobody reads.
     const beforeGuard = made.notifications.length
     await commandDefinition.handler("now", made.makeCtx({ mode: "headless", hasUI: false }))
     assert.equal(made.notifications.length, beforeGuard, "a host with no UI reads no reply")
 
-    row("pi reply channel", "ctx.ui.notify reached for both arguments, guarded without a UI")
+    row("pi reply channel", "every argument word reaches ctx.ui.notify, guarded without a UI")
 
     // --- The byte-level baseline: the same claim the OpenCode golden block makes. --
     // The rows above pin behavior by numbers and content. A refactor can pass every
@@ -2437,18 +2446,27 @@ console.log("")
     messages: buildTranscript(6),
   })
   const many = {}
-  // 230 x 380 characters is ~22,000 tokens, well past the 16,000-token line, and
-  // every entry is under the 400-character floor, so the fold has nothing to do.
+  // 229 x 380 characters is ~21,800 tokens, well past the 16,000-token line, and every one
+  // of them is under the 400-character floor — so the fold leaves them alone and only the
+  // long one moves. They stay wide on purpose: this session is past the line *after* the
+  // fold too, which is what makes it the one place the size line can be read.
   for (let index = 0; index < 230; index += 1) many["finding-" + index] = filler("finding " + index, 380)
+  many["finding-0"] = filler("the long finding", 40000)
   const wideAck = await wideHost.tools[0].execute(
     { state_patch: { findings: many }, summary: "a wide Sigma" },
     { sessionID: "ses_sigma_wide", agent: "build", messageID: "msg_wide", id: "call_wide", signal: new AbortController().signal },
   )
-  assert.equal(wideAck.output.condensed, undefined, "a Sigma of short findings has nothing to fold")
+  assert.equal(
+    wideAck.output.condensed.folded,
+    1,
+    "only the finding over the floor is folded; the 380-character ones are left alone",
+  )
   await wideHost.commands[0].execute({ sessionID: "ses_sigma_wide", prompt: {} })
   const printed = wideHost.prompts[wideHost.prompts.length - 1].text
   assert.ok(printed.includes("over the 16000-token line"), "a Sigma past the threshold is named: " + printed.slice(-300))
   assert.ok(printed.includes("findings"), "and the dominant key is named too")
+  assert.ok(printed.includes("The archive holds 1 entry"), "the line also names what the fold set aside")
+  assert.ok(printed.includes("/skillstate <key>"), "and the way back to it")
 
   // Under the threshold, the line is absent rather than printed with a zero.
   const quietHost = createHost()
@@ -2484,11 +2502,19 @@ console.log("")
     tools: {},
     messages: buildTranscript(6),
   })
+  // The middle of this value is what the fold removes. It is a marker rather than a window
+  // of the filler because the filler repeats: a filler slice would reappear in the head or
+  // the tail by period, and the assertion below would then be measuring its own arithmetic.
+  const longValue =
+    filler("the finding before the middle", 45000) +
+    " THE MIDDLE THE FOLD TAKES " +
+    filler("the finding after the middle", 45000)
+  const longMiddle = "THE MIDDLE THE FOLD TAKES"
   const foldAck = await foldHost.tools[0].execute(
     {
       state_patch: {
         findings: {
-          long: filler("finding", 90000),
+          long: longValue,
           note: "the first account of the note",
           note_corrected: "the corrected account of the note",
           probe_step1: "the first probe",
@@ -2513,10 +2539,10 @@ console.log("")
   assert.ok(marker !== null, "and it says where the rest went: " + foldedFindings.long.slice(150, 300))
   assert.equal(
     Number(marker[1]) + (foldedFindings.long.length - marker[0].length),
-    90000,
+    longValue.length,
     "the marker names exactly what left, so head + tail + folded is the whole finding",
   )
-  assert.equal(stored.archive.long.length, 90000, "the archive holds every character of it")
+  assert.equal(stored.archive.long.length, longValue.length, "the archive holds every character of it")
   assert.equal(foldedFindings.note, undefined, "a correction replaces the account it corrects")
   assert.equal(stored.archive.note, "the first account of the note", "which is kept rather than lost")
   assert.equal(foldedFindings.note_corrected, "the corrected account of the note", "and the correction survives whole")
@@ -2528,6 +2554,48 @@ console.log("")
   await foldHost.commands[0].execute({ sessionID: "ses_sigma_fold", prompt: {} })
   const afterFold = foldHost.prompts[foldHost.prompts.length - 1].text
   assert.ok(!afterFold.includes("-token line"), "the fold removed what the line complained about: " + afterFold.slice(-200))
+
+  // --- The read path: what the fold set aside comes back in full. ----------
+  // The assertion that carries the weight is the *middle*: the head and the tail are still
+  // in Σ, so a reply that echoed those would prove nothing about the archive.
+  await foldHost.commands[0].execute({ sessionID: "ses_sigma_fold", prompt: { text: "long" } })
+  const recalled = foldHost.prompts[foldHost.prompts.length - 1].text
+  assert.ok(
+    recalled.includes("folded: the render keeps its head and tail"),
+    "a folded key says where its text went: " + recalled.slice(0, 140),
+  )
+  assert.ok(recalled.includes(longMiddle), "and hands back the middle the render dropped")
+  assert.ok(!foldedFindings.long.includes(longMiddle), "which the render really does not have")
+  assert.ok(recalled.includes(longValue.slice(-120)), "while the tail the render kept is there too")
+
+  await foldHost.commands[0].execute({ sessionID: "ses_sigma_fold", prompt: { text: "note" } })
+  const supersededReply = foldHost.prompts[foldHost.prompts.length - 1].text
+  assert.ok(
+    supersededReply.includes("superseded: no longer in Σ, kept only in the archive"),
+    "a key the fold replaced says it is no longer in Σ: " + supersededReply.slice(0, 140),
+  )
+  assert.ok(supersededReply.includes("the first account of the note"), "and hands back what Σ no longer holds")
+
+  await foldHost.commands[0].execute({ sessionID: "ses_sigma_fold", prompt: { text: "archive" } })
+  const listing = foldHost.prompts[foldHost.prompts.length - 1].text
+  assert.ok(listing.includes("archive: 4 entries"), "the listing counts what was set aside: " + listing.slice(0, 100))
+  assert.ok(listing.includes("long — " + longValue.length), "largest first, with the size that makes it worth recalling")
+  assert.ok(listing.includes("(superseded)"), "and the keys Σ no longer holds are marked")
+  row("skillstate archive", "lists what the fold set aside, largest first, superseded marked")
+
+  await foldHost.commands[0].execute({ sessionID: "ses_sigma_fold", prompt: { text: "no_such_key" } })
+  const missed = foldHost.prompts[foldHost.prompts.length - 1].text
+  assert.ok(missed.includes("is not in Σ's findings or the archive"), "a miss says so rather than throwing: " + missed.slice(0, 140))
+
+  // A session the plugin has never seen answers too: the archive is durable, so a recall
+  // does not have to wait for a request the way the report does.
+  await foldHost.commands[0].execute({ sessionID: "ses_sigma_none", prompt: { text: "anything" } })
+  const unseen = foldHost.prompts[foldHost.prompts.length - 1].text
+  assert.ok(
+    unseen.includes("Nothing has been folded out of Σ yet"),
+    "a recall needs no payload, unlike the report: " + unseen.slice(0, 140),
+  )
+  row("skillstate recall", "a folded key returns its full text, middle included, with no payload needed")
 
   // Idempotence: a write carrying no findings leaves both halves byte-identical.
   const heldFindings = JSON.stringify(foldedFindings)

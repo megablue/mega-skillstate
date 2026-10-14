@@ -24,10 +24,14 @@ import {
 import { COMMAND_DESCRIPTION } from "../../core/prompts.ts"
 import { sessionIdOf } from "../../core/skill-state.ts"
 import {
+  archiveReport,
   COMMAND_NAME,
   forcedReport,
   nothingYetReport,
   NOW_HINT,
+  parseAsk,
+  recallReport,
+  recordFor,
   type StateView,
   stateReport,
 } from "../../core/skill-state-command.ts"
@@ -35,7 +39,15 @@ import type { CommandDefinition, CommandInvocation, LastRequest } from "./types.
 
 // Re-exported so the names this adapter has always answered for still resolve from the
 // page the feature map points at, now that the definitions live in the core.
-export { COMMAND_NAME, stateBlock, stateReport, turnIndex } from "../../core/skill-state-command.ts"
+export {
+  archiveReport,
+  COMMAND_NAME,
+  parseAsk,
+  recallReport,
+  stateBlock,
+  stateReport,
+  turnIndex,
+} from "../../core/skill-state-command.ts"
 
 /** Everything the command needs from the plugin's wiring. */
 export interface SkillStateCommandOptions {
@@ -66,11 +78,21 @@ export function createSkillStateCommand(options: SkillStateCommandOptions): Comm
     execute: async (invocation: CommandInvocation) => {
       const sessionID = sessionIdOf(invocation)
       if (sessionID === undefined) return
-      const asked = String((invocation as { prompt?: { text?: unknown } })?.prompt?.text ?? "").trim()
+      const asked = String((invocation as { prompt?: { text?: unknown } })?.prompt?.text ?? "")
       const say = async (body: string): Promise<void> => {
         await options.reply(sessionID, body)
       }
-      const force = asked === "now"
+      const ask = parseAsk(asked)
+
+      // A recall reads Σ and the archive rather than the live payload, so it answers even
+      // in a session where no request has been seen yet: the archive is durable, and the
+      // payload is not.
+      if (ask.kind === "recall" || ask.kind === "archive") {
+        const record = await recordFor(options.deps, sessionID)
+        await say(ask.kind === "archive" ? archiveReport(record) : recallReport(ask.key, record))
+        return
+      }
+      const force = ask.kind === "now"
 
       // Both jobs answer the same way when no request has been seen yet: there is nothing
       // to measure and nothing to collapse, and the reply says which of the two it meant.

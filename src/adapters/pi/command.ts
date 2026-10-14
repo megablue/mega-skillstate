@@ -35,10 +35,14 @@ import {
   type TransformDeps,
 } from "../../core/context.ts"
 import {
+  archiveReport,
   commandDescription,
   forcedReport,
   nothingYetReport,
   NOW_HINT,
+  parseAsk,
+  recallReport,
+  recordFor,
   stateReport,
 } from "../../core/skill-state-command.ts"
 import type { LastRequest } from "../../core/types.ts"
@@ -70,10 +74,19 @@ export function createPiSkillStateCommand(options: PiSkillStateCommandOptions): 
       const sessionID = typeof ctx?.sessionId === "string" ? ctx.sessionId : undefined
       if (sessionID === undefined) return
       const reply = options.replyOf(ctx)
-      // The argument *is* the string, so `now` is a direct comparison against it. OpenCode
-      // reaches the same word through `invocation.prompt.text`; the wording is shared, the
-      // route to it is not.
-      const force = String(args ?? "").trim() === "now"
+      // The argument *is* the string here; OpenCode reaches it through
+      // `invocation.prompt.text`. The words mean the same thing on both, so the split
+      // between "this is a key" and "this is an instruction" is shared.
+      const ask = parseAsk(String(args ?? ""))
+
+      // A recall reads Σ and the archive rather than the live payload, so it answers even
+      // in a session where the context pass has not seen a request yet.
+      if (ask.kind === "recall" || ask.kind === "archive") {
+        const record = await recordFor(options.deps, sessionID)
+        reply(ask.kind === "archive" ? archiveReport(record) : recallReport(ask.key, record))
+        return
+      }
+      const force = ask.kind === "now"
 
       const payload = options.payloadOf(sessionID)
       if (payload === undefined) {

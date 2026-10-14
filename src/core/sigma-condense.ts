@@ -24,8 +24,10 @@
  * **archive**, under the key it came from, inside the same durable record and in
  * the same write — so a restart keeps it. The archive is cold: `render` never
  * emits it, which is the whole point (the bytes stop being charged to every
- * request while the text survives). There is no read path yet, so it is a
- * backstop a human can read out of the store, not a tool the model can call.
+ * request while the text survives). It reads back through `/skillstate <key>`,
+ * which prints one entry in full, and `/skillstate archive`, which lists what was
+ * set aside — so a fold shortens a finding rather than deleting it. That read path
+ * lives in `skill-state-command.ts`; this module only writes.
  *
  * Idempotent by construction, which is what makes it safe to run on every write:
  * a superseded key is gone, a folded finding is at or under the floor, and a

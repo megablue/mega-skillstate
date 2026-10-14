@@ -134,8 +134,10 @@ condenser commit is an open thread.**
   its newest member; a finding over the floor keeps its head and its tail. What
   leaves the render goes to the record's **archive**: cold (`render` never emits
   it), bounded oldest-first with the newest entry never the one dropped
-  (`MAX_ARCHIVE_CHARS` 262144). **There is no read path yet**, so the archive is a
-  human backstop rather than the model's memory. The floor, not the mechanism, is
+  (`MAX_ARCHIVE_CHARS` 262144). It reads back through `/skillstate <key>`, which prints
+  one entry in full, and `/skillstate archive`, which lists what was set aside; both
+  answer without a payload, because the archive is durable. The floor, not the mechanism,
+  is
   the decision, and it was measured from the store first: 400 removes 17.6K / 13.3K
   / 7.5K tokens on the three live sessions, 800 only 3.9K / 4.5K / 5.5K. Key
   supersession on its own is about 3K characters — hygiene, because the merge

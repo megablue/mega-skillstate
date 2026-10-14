@@ -1,7 +1,8 @@
 /**
- * `/skillstate`'s semantics: print the state, and what the context pass is keeping.
+ * `/skillstate`'s semantics: print the state, force a pass, and read back what the fold
+ * set aside.
  *
- * Two jobs, one command. With no argument it is the window into what the transform is
+ * Four jobs, one command. With no argument it is the window into what the transform is
  * actually doing — Σ as it stands, the measured context, the window, how many recent
  * turns are kept, and a per-turn index saying which turns were collapsed into Σ and
  * which are still verbatim. A policy nobody can inspect is a policy nobody can tune, and
@@ -13,18 +14,26 @@
  * rules, the protected head and the balanced-tail rule still apply, because a hand-asked
  * collapse is not permission to split a tool pair.
  *
- * Everything here is a pure function of the descriptor, because the descriptor is the
- * measurement both the transform and the command read. The argument parsing (`now`
- * versus nothing), the payload lookup and the reply channel are the host's and stay in
- * each adapter: Pi's command takes a **string** where OpenCode's takes an invocation
- * object, and Pi answers through `ctx.ui.notify` where OpenCode prompts the session.
+ * Any other argument is a finding's key, answered out of the session's **archive** — the
+ * full text the fold took out of the render. That is what makes the fold a memory rather
+ * than a deletion: a folded finding shows its own head and tail in Σ, and its middle is
+ * one command away. `archive` lists what was set aside, largest first. Neither job needs
+ * the live payload, so both answer in a session no request has reached yet — the archive
+ * is durable, and the payload is not.
+ *
+ * The wording of every answer is decided here, once. What stays in each adapter is where
+ * the argument's text comes from, the payload lookup and the reply channel: Pi's command
+ * takes a **string** where OpenCode's takes an invocation object, and Pi answers through
+ * `ctx.ui.notify` where OpenCode prompts the session.
  *
  * @module mega-skillstate/skill-state-command
  */
 
-import { estimateTokens, type ContextDescriptor } from "./context.ts"
+import { estimateTokens, type ContextDescriptor, type TransformDeps } from "./context.ts"
 import { COMMAND_DESCRIPTION, turnSpan } from "./prompts.ts"
 import { render } from "./schema.ts"
+import type { Archive, StateRecord } from "./state.ts"
+import { stateStore } from "./state.ts"
 
 /** The command's name, on every host. */
 export const COMMAND_NAME = "skillstate"
@@ -34,6 +43,8 @@ export interface StateView {
   get(): Record<string, unknown>
   step(): number
   summary(): string | undefined
+  /** The full text of findings the fold replaced; empty when nothing has folded. */
+  archive(): Archive
 }
 
 /** The state block: Σ as compact JSON, with its step and the model's note. */
@@ -112,7 +123,7 @@ function sigmaSizeLine(record: StateView, threshold: number): string | undefined
   const tokens = estimateTokens(text)
   if (tokens <= threshold) return undefined
   const findings = keyShare(record.get(), "findings")
-  return (
+  let line =
     "Σ is ~" +
     tokens +
     " tokens, " +
@@ -120,7 +131,19 @@ function sigmaSizeLine(record: StateView, threshold: number): string | undefined
     "% of it findings — over the " +
     threshold +
     "-token line; consolidate rather than let it crowd the window"
-  )
+  // The line that names the pressure also names the way back to what the fold took: a
+  // model told to consolidate needs to know the middle of a folded finding is readable,
+  // or the archive is a deletion it cannot see.
+  const folded = Object.keys(record.archive()).length
+  if (folded > 0) {
+    line +=
+      ". The archive holds " +
+      entryCount(folded) +
+      " the fold set aside: `/" +
+      COMMAND_NAME +
+      " <key>` prints one in full"
+  }
+  return line
 }
 
 /** The account the command prints: the state, the numbers, then the per-turn index. */
@@ -145,6 +168,146 @@ export function stateReport(descriptor: ContextDescriptor, sigmaWarnTokens = 0):
   // A filtered slot would shift every line below it, so the line is either
   // present or replaced by the blank it already occupies.
   return lines.map((line) => line ?? "").join("\n")
+}
+
+/** "1 entry" / "N entries", because the size line and the listing both say it. */
+function entryCount(count: number): string {
+  return count === 1 ? "1 entry" : count + " entries"
+}
+
+/** Σ's findings dictionary, or an empty one when there is nothing readable there. */
+function findingsOf(view: StateView): Record<string, unknown> {
+  const findings = view.get()["findings"]
+  if (typeof findings !== "object" || findings === null || Array.isArray(findings)) return {}
+  return findings as Record<string, unknown>
+}
+
+/** One value as text: a finding is a string, and anything else is shown as its JSON. */
+function textOf(value: unknown): string {
+  if (typeof value === "string") return value
+  try {
+    const json = JSON.stringify(value)
+    return typeof json === "string" ? json : String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+/** Whether a name is worth offering as a guess: either one contains the other. */
+function similarKey(name: string, asked: string): boolean {
+  const lower = name.toLowerCase()
+  const wanted = asked.toLowerCase()
+  return lower.includes(wanted) || wanted.includes(lower)
+}
+
+/** What one invocation of the command was asked for. */
+export type CommandAsk =
+  | { readonly kind: "report" }
+  | { readonly kind: "now" }
+  | { readonly kind: "archive" }
+  | { readonly kind: "recall"; readonly key: string }
+
+/**
+ * The argument, read once for every host.
+ *
+ * OpenCode hands it over as `invocation.prompt.text` and Pi as the handler's own string
+ * parameter; the words mean the same thing on both, so the split between "this is a key"
+ * and "this is an instruction" happens here rather than in each adapter. A key that
+ * arrived quoted or in backticks is unquoted first, because a caller told to name a key
+ * will sometimes dress it up.
+ */
+export function parseAsk(asked: string): CommandAsk {
+  const text = String(asked ?? "")
+    .trim()
+    .replace(/^[`'"]+/, "")
+    .replace(/[`'"]+$/, "")
+  if (text.length === 0) return { kind: "report" }
+  if (text === "now") return { kind: "now" }
+  if (text === "archive") return { kind: "archive" }
+  return { kind: "recall", key: text }
+}
+
+/**
+ * The session's record, for the asks that read Σ and the archive without a payload.
+ *
+ * A recall has nothing to do with the live request: the archive is durable and the
+ * payload may not exist yet. This is the one place the command reaches the store rather
+ * than the measurement, and it is why a recall answers in a session no request has
+ * reached — the same session where the report has to say it has seen nothing.
+ */
+export async function recordFor(deps: TransformDeps, sessionID: string): Promise<StateRecord> {
+  return await stateStore(sessionID, { storage: deps.storage, log: deps.log })
+}
+
+/**
+ * One finding, in full, from wherever it now lives.
+ *
+ * Three answers, and the wording says which one this is: the archived text of a folded
+ * finding, whose render keeps only its head and tail; the archived text of a superseded
+ * one, which Σ no longer holds at all; or a live value that was never folded. A miss
+ * names the near matches rather than nothing, because a key asked for by hand is as often
+ * a half-remembered name as an exact one.
+ */
+export function recallReport(key: string, view: StateView): string {
+  const held = view.archive()[key]
+  const findings = findingsOf(view)
+  const live = findings[key]
+
+  if (typeof held === "string") {
+    const folded = typeof live === "string"
+    return (
+      "`" +
+      key +
+      "` — " +
+      held.length +
+      " chars, " +
+      (folded
+        ? "folded: the render keeps its head and tail"
+        : "superseded: no longer in Σ, kept only in the archive") +
+      "\n\n" +
+      held
+    )
+  }
+  if (live !== undefined) {
+    const text = textOf(live)
+    return "`" + key + "` — live in Σ, " + text.length + " chars (never folded)\n\n" + text
+  }
+
+  const near = Object.keys(findings).filter((name) => similarKey(name, key))
+  const held_ = Object.keys(view.archive())
+  const lines = ["`" + key + "` is not in Σ's findings or the archive."]
+  if (near.length > 0) lines.push("closest: " + near.slice(0, 8).join(", "))
+  lines.push(
+    held_.length === 0
+      ? "Nothing has been folded out of Σ yet."
+      : "`/" + COMMAND_NAME + " archive` lists the " + entryCount(held_.length) + " the fold set aside.",
+  )
+  return lines.join("\n")
+}
+
+/**
+ * What the archive holds: every key the fold set aside, largest first.
+ *
+ * Largest first because the size is what makes a key worth recalling by hand, and the
+ * list is capped because an archive of a few hundred entries is a wall of names. A key no
+ * longer in Σ is marked as superseded: for that one the archive is the only copy left.
+ */
+export function archiveReport(view: StateView, limit = 40): string {
+  const archive = view.archive()
+  const names = Object.keys(archive)
+  if (names.length === 0) {
+    return "The archive is empty: nothing has been folded out of Σ yet."
+  }
+  const findings = findingsOf(view)
+  const chars = names.reduce((total, name) => total + archive[name].length, 0)
+  const biggest = [...names].sort((left, right) => archive[right].length - archive[left].length)
+  const lines = ["archive: " + entryCount(names.length) + ", " + chars + " chars"]
+  for (const name of biggest.slice(0, limit)) {
+    lines.push("  " + name + " — " + archive[name].length + (name in findings ? "" : " (superseded)"))
+  }
+  if (biggest.length > limit) lines.push("… and " + (biggest.length - limit) + " more")
+  lines.push("`/" + COMMAND_NAME + " <key>` prints one in full.")
+  return lines.join("\n")
 }
 
 /** The command's one-line description, on every host. */

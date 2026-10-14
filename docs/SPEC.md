@@ -54,7 +54,10 @@ series (`probe_step3`) keeps only its newest member; and a finding longer than
 `sigmaCondenseChars` keeps its head and its tail. What leaves the render is written
 to the session's **archive**, inside the same durable record and never rendered, so
 the text is recoverable rather than destroyed; the archive is bounded oldest-first
-and the newest fold is never the entry dropped. Folding is idempotent and inert
+and the newest fold is never the entry dropped. What was set aside reads back by hand:
+`/skillstate <key>` prints one archived finding in full — for a folded key that is the
+middle its render no longer shows, and for a superseded one it is the only copy left —
+while `/skillstate archive` lists the archive, largest first. Folding is idempotent and inert
 below the threshold, so a small session's Σ is left exactly as the model wrote it.
 `sigmaCondenseChars: 0` disables it.
 
@@ -118,4 +121,5 @@ Controls the model/user touch: the `skill_state` tool (the model writes a
 delete it; keys the schema does not own are dropped; a patch that is not an object comes
 back as an error and leaves Σ untouched) and the `/skillstate` command (print the current
 Σ, the measured context, and what is collapsed vs kept; `/skillstate now` collapses
-immediately).
+immediately; `/skillstate <key>` prints one finding in full from the archive; `/skillstate
+archive` lists it).

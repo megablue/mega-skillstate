@@ -15,9 +15,16 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   by a state write.
 - **`/skillstate`** — prints the current Σ, the measured context, and a per-turn index of
   what is collapsed vs kept; **`/skillstate now`** forces a collapse on the current pass.
-  When Σ's own render has grown past `sigmaWarnTokens` the report says so and names the
-  dominant key, because Σ is injected into every request and the collapse is indifferent
-  to how much that costs.
+  When Σ's own render has grown past `sigmaWarnTokens` the report says so, names the
+  dominant key and — once the fold has run — names the archive and the command that reads
+  it, because Σ is injected into every request and the collapse is indifferent to how much
+  that costs.
+- **`/skillstate <key>`** — prints one finding in full out of the session **archive**, which
+  is where the fold puts what leaves the render. A folded key comes back whole (the render
+  keeps only its head and tail), a superseded key says Σ no longer holds it, a key still live
+  in Σ is printed as it stands, and a miss names the near matches. **`/skillstate archive`**
+  lists what was set aside, largest first, marking the keys Σ no longer holds. Neither job
+  needs the live payload, so both answer in a session no request has reached yet.
 - A **standing policy** section tells the model Σ is the record and anything not written to it
   goes with the turn that knew it; plus a **stale reminder** after `staleAfter` steps with no
   new user message (only at a balanced tail).
@@ -33,7 +40,7 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   and `boundedArchive` (`MAX_ARCHIVE_CHARS`, oldest out first, the newest entry never the
   one dropped). `writeSkillState` is its only caller, through `condensePast`.
 - `src/adapters/opencode/tool.ts` — `createSkillState({ storage, config })` only: the OpenCode envelope (`options: { codemode: false }`, a permissive `output`, the measured details above) whose `execute` maps args to `SkillStateWrite`, awaits `writeSkillState`, and wraps the result with `textResult`. No write logic remains here; it re-exports the core names.
-- `src/core/skill-state-command.ts` — the command's host-free half: `stateBlock`, `turnIndex`, `stateReport` (all read only a `ContextDescriptor`), plus the reply phrasings `forcedReport`, `nothingYetReport`, `NOW_HINT`, and `COMMAND_NAME = "skillstate"`.
+- `src/core/skill-state-command.ts` — the command's host-free half: `stateBlock`, `turnIndex`, `stateReport` (read a `ContextDescriptor`), the reply phrasings `forcedReport`, `nothingYetReport`, `NOW_HINT`, `COMMAND_NAME = "skillstate"`, and the read path — `parseAsk` (the argument words, shared by both hosts), `recordFor` (the record reached from `deps` rather than from a payload), `recallReport`, `archiveReport`. `StateView` is what the command needs from a record, `archive()` included.
 - `src/adapters/opencode/command.ts` — `createSkillStateCommand({ deps, payloadOf, reply })` only: it reads `invocation.prompt.text` (`now` means force), looks up the live payload, and answers through the injected `reply` channel. It is the seam a second adapter replaces — Pi takes a **string** arg and answers through `ctx.ui.notify`.
 - `src/core/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
   `toolDescription`, `schemaText`, `ackText` (the ack format).
@@ -144,8 +151,11 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 transform does not read: they shape the report's size line and the write path's fold,
 and nothing in the context pass consults either. The gate is deliberately the same
 threshold as the line — the line names the pressure and the fold is what answers it,
-so a model is told and then helped rather than quietly edited. Measured on three live
-sessions, a 400-character floor removes 17.6K, 13.3K and 7.5K tokens of Σ.
+so a model is told and then helped rather than quietly edited. Measured from the store
+on three live sessions, a 400-character floor removes 17.6K, 13.3K and 7.5K tokens of Σ.
+The first session it then ran on for real shed 10,483 tokens (41,932 characters) at the
+same floor, less than the 17.6K projected for it because a folded finding still costs its
+head, its tail and a marker; a re-run over that Σ folds nothing at all.
 
 ## Tests that pin it
 
@@ -155,13 +165,19 @@ step) · dropped (not in the schema): not_a_key`), **the durable write** it pers
 string both write and the ack says the string was parsed; a broken string and a non-object
 string refuse with Σ and the step untouched), `/skillstate` prints Σ + the per-turn index,
 `/skillstate now` forces a pass leaving pairs intact, stale reminder appended only at a
-balanced tail, the **Σ size line** past `sigmaWarnTokens` and its silence below it, the
-**fold** (one long finding folded to head and tail, a correction and a two-of-three
-series superseded, the marker naming exactly what left, the archive holding all 90,000
-characters, and the size line then silent because what it complained about is gone), its
-**idempotence** (a second write leaves the findings and the archive byte-identical), and
-the **archive bound** (a finding larger than the bound entire: the newest fold survives
-and the oldest entry yields to it).
+balanced tail, the **Σ size line** past `sigmaWarnTokens` and its silence below it — and,
+in the same report, that line naming the archive and `/skillstate <key>` once a fold has
+put something in it — the **fold** (one long finding folded to head and tail, a correction
+and a two-of-three series superseded, the marker naming exactly what left, the archive
+holding every character of it, and the size line then silent because what it complained
+about is gone), its **idempotence** (a second write leaves the findings and the archive
+byte-identical), the **archive bound** (a finding larger than the bound entire: the newest
+fold survives and the oldest entry yields to it), and the **read path** (**skillstate
+recall**) — a recalled key returns the *middle* of the folded text that the render does not
+have, a superseded key is handed back although Σ no longer holds it, the listing is largest
+first with the superseded keys marked, a miss says so rather than throwing, and a session
+with no payload still answers, because a recall does not wait for a request the way the
+report does.
 
 ## Related
 

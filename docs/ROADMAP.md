@@ -229,10 +229,13 @@ the manifest fields are unread. Design is settled; these three gate the code.
 - [ ] Codex setup doc: user-level `model_providers.<id>.base_url` +
       `wire_api = "responses"`; API-key requirement; ChatGPT-auth →
       hooks-degraded fallback documented.
-- **Gate:** codec golden-transcript tests; live manual runs on CC and Codex with
-  a visible collapse; pairing-balance fuzz (no split pairs across many
-  simulated requests); daemon killed mid-stream → clean client error, Σ store
-  intact.
+- **Gate:** codec golden-transcript tests — **done** (`fixtures/codecs/`, 9
+  cases byte-for-byte); live manual runs on CC and Codex with a visible collapse
+  — **still owed, needs the operator's own hosts**; pairing-balance fuzz — **done**
+  (`pairing balance fuzz`: 400 transcripts, 3034 safe cuts, 3125 unsafe cuts
+  confirmed both directions, 348 collapses whole); daemon killed mid-stream —
+  **done** (`daemon killed mid-stream`: a cut stream errors instead of
+  completing, and Σ survives a real SIGKILL).
 
 ### Phase 4 — DeepSeek Harness adapter
 

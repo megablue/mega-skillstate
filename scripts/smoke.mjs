@@ -29,7 +29,8 @@
 
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { spawn } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -2043,6 +2044,399 @@ console.log("")
   )
 
   row("proxy config", "strict, no default for upstream or wire, the core's keys reach their own home")
+}
+
+// ---------------------------------------------------------------------------
+// The pairing invariant, over transcripts nobody wrote by hand.
+//
+// Every discrete case above checks the payloads somebody thought of. This one
+// generates the ones nobody did: seeded, so a failure reproduces exactly, and
+// shaped to hit the awkward cases on purpose - several calls in one message,
+// two results in one message, a call and its result in the SAME message, and
+// turns with no tools at all.
+//
+// The assertion runs in BOTH directions, which is what makes it a measurement
+// rather than a restatement of `balanceCuts`. Where the fold says a cut is
+// safe, the prefix before it must have no call still waiting for its result;
+// where it says a cut is unsafe, that same prefix must have one. A fold that
+// answered `true` everywhere would fail the second half instead of passing
+// quietly.
+//
+// This is the roadmap's "pairing-balance fuzz (no split pairs across many
+// simulated requests)" - and it needs no live host, because a simulated
+// request is exactly what this file already builds.
+// ---------------------------------------------------------------------------
+{
+  const viewModule = await load("src/core/view.ts")
+  assert.equal(typeof viewModule.balanceCuts, "function", "the pairing fold must be exported")
+  assert.equal(typeof viewModule.selectPrunableRange, "function", "and the range selector it walks back to safety")
+
+  /** A tiny deterministic PRNG, so a failing seed reproduces and no run flakes. */
+  const prng = (seed) => {
+    let a = seed >>> 0
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0
+      let t = a
+      t = Math.imul(t ^ (t >>> 15), t | 1)
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+  }
+
+  /** The session memory the numbering needs, built the way a host would build it. */
+  const turnMemory = () => {
+    const byId = new Map()
+    let highest = 0
+    return {
+      turnOf: (id) => byId.get(id),
+      assignTurn: (id, turn) => {
+        byId.set(id, turn)
+        if (turn > highest) highest = turn
+      },
+      highestTurn: () => highest,
+    }
+  }
+
+  /** How many calls in this prefix are still waiting for a result. */
+  const stillOpen = (messages) => {
+    let open = 0
+    for (const message of messages) {
+      for (const part of message.content ?? []) {
+        if (part.type === "tool-call") open += 1
+        else if (part.type === "tool-result") open -= 1
+      }
+    }
+    return open
+  }
+
+  /**
+   * One transcript, with pairing held together by construction.
+   *
+   * Results are only ever emitted for calls that are still open, and a trailing
+   * message closes whatever is left, so each transcript is balanced as a whole:
+   * `balanceCuts` throws on a result with no call, and this generator is built
+   * never to trip that throw.
+   */
+  const randomTranscript = (rand, seed) => {
+    const messages = [{ id: "u_head_" + seed, role: "user", content: [{ type: "text", text: "the assignment" }] }]
+    const open = []
+    let callSeq = 0
+    const nextCall = () => {
+      callSeq += 1
+      const id = "call_" + seed + "_" + callSeq
+      open.push(id)
+      return { type: "tool-call", id, name: "read", input: { file_path: "src/file" + callSeq + ".ts" } }
+    }
+    const nextResult = () => {
+      const id = open.shift() ?? ""
+      return { type: "tool-result", id, name: "read", result: { type: "text", value: "the result for " + id } }
+    }
+    const turns = 2 + Math.floor(rand() * 8)
+    for (let turn = 1; turn <= turns; turn += 1) {
+      messages.push({
+        id: "u_" + seed + "_" + turn,
+        role: "user",
+        content: [{ type: "text", text: "turn " + turn + " instruction" }],
+      })
+      const roll = rand()
+      if (roll < 0.18) continue
+      // A turn with reasoning and no tools at all: the shape with nothing to split.
+      if (roll < 0.3) {
+        messages.push({
+          id: "a_" + seed + "_" + turn,
+          role: "assistant",
+          content: [{ type: "reasoning", text: "thinking about turn " + turn }],
+        })
+        continue
+      }
+      // A call and its result in the SAME message, which is what makes a cut
+      // inside a message the dangerous one.
+      if (roll < 0.45 && open.length > 0) {
+        messages.push({
+          id: "a_" + seed + "_" + turn,
+          role: "assistant",
+          content: [{ type: "reasoning", text: "reasoning for turn " + turn }, nextCall(), nextResult()],
+        })
+        continue
+      }
+      const fresh = rand() < 0.3 ? 2 : 1
+      const calls = []
+      for (let c = 0; c < fresh; c += 1) calls.push(nextCall())
+      messages.push({
+        id: "a_" + seed + "_" + turn,
+        role: "assistant",
+        content: [{ type: "reasoning", text: "reasoning for turn " + turn }, ...calls],
+      })
+      // Results land one at a time or two at once, and never for a call already closed.
+      let closing = rand() < 0.8 ? Math.min(open.length, rand() < 0.3 ? 2 : 1) : 0
+      while (closing > 0) {
+        closing -= 1
+        messages.push({ id: "r_" + seed + "_" + turn + "_" + (closing + 1), role: "tool", content: [nextResult()] })
+      }
+    }
+    if (open.length > 0) {
+      const results = []
+      while (open.length > 0) results.push(nextResult())
+      messages.push({ id: "close_" + seed, role: "tool", content: results })
+    }
+    return messages
+  }
+
+  const rand = prng(0x5eed)
+  let transcripts = 0
+  let safe = 0
+  let unsafe = 0
+  let collapsed = 0
+  for (let seed = 1; seed <= 400; seed += 1) {
+    const transcript = randomTranscript(rand, seed)
+    const view = viewModule.viewOf(transcript)
+    const balance = viewModule.balanceCuts(view)
+    for (let index = 0; index <= view.length; index += 1) {
+      const open = stillOpen(transcript.slice(0, index))
+      if (balance.cuts[index] === true) {
+        assert.equal(
+          open,
+          0,
+          "transcript " + seed + ": a cut balanceCuts calls safe at " + index + " leaves " + open + " call(s) open, so it splits a pair",
+        )
+        safe += 1
+      } else {
+        assert.ok(
+          open > 0,
+          "transcript " + seed + ": a cut balanceCuts calls unsafe at " + index + " leaves nothing open, so the flag would mean nothing",
+        )
+        unsafe += 1
+      }
+    }
+    // The collapse decision itself must land on a boundary that leaves the kept
+    // window whole, which is the rule this whole file exists to hold.
+    const memory = turnMemory()
+    const assigned = viewModule.turnMap(view, memory)
+    const range = viewModule.selectPrunableRange(view, balance.cuts, assigned, {
+      keepRecentTurns: 2,
+      protectFirstUserMessage: true,
+    })
+    if (range !== null) {
+      const kept = [...transcript.slice(0, range.startIdx), ...transcript.slice(range.endIdx + 1)]
+      checkPairing(kept, "the kept window of transcript " + seed + ", turns " + range.turns.join(","))
+      collapsed += 1
+    }
+    transcripts += 1
+  }
+  assert.ok(safe > 0, "the generator produced safe cuts, or the fuzz has nothing to assert")
+  assert.ok(unsafe > 0, "and unsafe ones too, or the failure mode never ran")
+  row(
+    "pairing balance fuzz",
+    transcripts + " transcript(s), " + safe + " safe cut(s), " + unsafe + " unsafe confirmed, " + collapsed + " collapse(s) whole",
+  )
+}
+
+// ---------------------------------------------------------------------------
+// A daemon whose stream is cut, and a Σ written by a process that was killed.
+//
+// The roadmap's words for this part of the gate are "daemon killed mid-stream
+// -> clean client error, Sigma store intact", and it is two assertions that
+// fail in different places.
+//
+// A client told a stream succeeded when it did not is the worse of the two: the
+// model answers half a reply and nothing downstream can tell. So the first half
+// answers a request from an upstream that begins responding and then destroys
+// the socket, and asserts the client sees an ERROR - never a clean end
+// reporting a stream that stopped.
+//
+// The second half is Σ. The store's answer to an interrupted write is a
+// temporary file and a rename, so a kill in the middle of a write can only ever
+// leave the previous whole value behind. That is a claim about file state, and
+// it is tested by a real SIGKILL in a real child process writing real
+// megabytes - plus a deterministic version of the same failure for the case the
+// timing happens to miss.
+// ---------------------------------------------------------------------------
+{
+  const serverModule = await load("src/proxy/server.ts")
+  const storeModule = await load("src/proxy/store.ts")
+  const stateModule = await load("src/core/state.ts")
+  const coreConfig = await load("src/core/config.ts")
+  const codecModule = await load("src/proxy/codec-anthropic.ts")
+  assert.equal(typeof serverModule.createProxyServer, "function", "the daemon must export its factory")
+
+  const killDir = mkdtempSync(join(tmpdir(), "mega-skillstate-kill-"))
+  try {
+    // --- A writer killed for real, by SIGKILL, in another process. -----------
+    const target = join(killDir, "victim.json")
+    const ready = join(killDir, "ready")
+    const childScript = join(killDir, "writer.mjs")
+    // Three megabytes of value, so one write is many syscalls wide and a kill
+    // has somewhere to land. The marker records a write that already completed,
+    // so the parent knows a whole value is in place before the kill.
+    writeFileSync(
+      childScript,
+      [
+        'import { writeFileSync, renameSync } from "node:fs"',
+        'const [target, ready] = process.argv.slice(2)',
+        'const pad = "x".repeat(3 * 1024 * 1024)',
+        'for (let n = 1; ; n += 1) {',
+        '  const staging = target + "." + process.pid + ".tmp"',
+        '  writeFileSync(staging, JSON.stringify({ sequence: n, pad }), "utf8")',
+        '  renameSync(staging, target)',
+        '  writeFileSync(ready, String(n), "utf8")',
+        '}',
+      ].join("\n"),
+    )
+    const writer = spawn(process.execPath, [childScript, target, ready], { stdio: "ignore" })
+    const waitFor = (file, limit = 20000) =>
+      new Promise((resolve, reject) => {
+        const startedAt = Date.now()
+        const poll = setInterval(() => {
+          if (existsSync(file)) {
+            clearInterval(poll)
+            resolve()
+          } else if (Date.now() - startedAt > limit) {
+            clearInterval(poll)
+            reject(new Error("timed out waiting for " + file))
+          }
+        }, 5)
+      })
+    await waitFor(ready)
+    writer.kill("SIGKILL")
+    await new Promise((resolve) => writer.on("exit", resolve))
+
+    assert.ok(existsSync(target), "the killed writer left its target behind")
+    let survived
+    try {
+      survived = JSON.parse(readFileSync(target, "utf8"))
+    } catch {
+      throw new Error("the file a killed writer left cannot be parsed, so the write was not atomic")
+    }
+    assert.equal(typeof survived.sequence, "number", "and what it holds is a whole value, not the middle of one")
+    assert.equal(survived.pad.length, 3 * 1024 * 1024, "the whole of it, which is what the rename buys")
+
+    // --- The same failure without the timing. --------------------------------
+    // A writer killed mid-write leaves half a document in its staging file. The
+    // target must still read as whatever the last completed write left there.
+    const abandoned = target + "." + process.pid + ".tmp"
+    writeFileSync(abandoned, '{"sequence":99,"pad":"abc', "utf8")
+    assert.equal(
+      JSON.parse(readFileSync(target, "utf8")).sequence,
+      survived.sequence,
+      "an abandoned staging file is never mistaken for the value itself",
+    )
+    rmSync(abandoned, { force: true })
+
+    // --- A completed write leaves nothing behind, and a later one still lands.
+    // The staging name carries the writer's pid, so the child that just died and
+    // this process cannot collide on it.
+    const cleanDir = join(killDir, "clean")
+    const storage = storeModule.createProxyStore({ dir: cleanDir, log: () => {} })
+    await storage.set(stateModule.stateKey("ses_kill"), { state: { objective: "written after the kill" }, collapsed: null })
+    assert.deepEqual(readdirSync(cleanDir), ["state-ses_kill.json"], "a completed write leaves no staging file behind")
+    await storage.set(stateModule.stateKey("ses_kill"), { state: { objective: "written by a second writer" }, collapsed: null })
+    assert.deepEqual(readdirSync(cleanDir), ["state-ses_kill.json"], "and a second one does not accumulate one either")
+
+    // --- A stream that is cut is reported as cut, not as complete. -----------
+    const wireTranscript = (turns) => {
+      const messages = [{ role: "user", content: [{ type: "text", text: filler("the assignment", 900) }] }]
+      for (let turn = 1; turn <= turns; turn += 1) {
+        messages.push({ role: "user", content: [{ type: "text", text: filler("turn " + turn + " instruction", 220) }] })
+        messages.push({
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: filler("reasoning for turn " + turn, 320), signature: "sig-" + turn },
+            { type: "tool_use", id: "toolu_" + turn, name: "read", input: { file_path: "src/file" + turn + ".ts" } },
+          ],
+        })
+        messages.push({
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "toolu_" + turn, content: filler("result of turn " + turn, 2400) }],
+        })
+      }
+      return messages
+    }
+
+    const upstream = createServer((request, response) => {
+      request.on("data", () => {})
+      request.on("end", () => {
+        if (request.url === "/v1/cut") {
+          response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" })
+          response.write('data: {"type":"message_start"}\n\n')
+          // Killed before it finished: no closing chunk, and the socket goes away
+          // rather than ending cleanly.
+          setTimeout(() => response.socket?.destroy(), 80)
+          return
+        }
+        response.writeHead(200, { "content-type": "application/json" })
+        response.end(JSON.stringify({ id: "msg_cut", role: "assistant", content: [{ type: "text", text: "whole" }] }))
+      })
+    })
+    await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve))
+    const upstreamPort = upstream.address().port
+
+    // A durable store behind the daemon, so the Σ the pass wrote while the stream
+    // was in flight is the thing whose survival this asserts.
+    const daemonDir = join(killDir, "daemon")
+    const daemon = serverModule.createProxyServer({
+      port: 0,
+      upstream: "http://127.0.0.1:" + upstreamPort,
+      codec: codecModule.codec,
+      config: coreConfig.resolveConfig(OPTIONS),
+      fallbackSession: "kill-shared",
+      storage: storeModule.createProxyStore({ dir: daemonDir, log: () => {} }),
+      log: () => {},
+    })
+    await new Promise((resolve) => daemon.listen(0, "127.0.0.1", resolve))
+    const daemonPort = daemon.address().port
+    try {
+      const cut = await fetch("http://127.0.0.1:" + daemonPort + "/v1/cut", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer kill-token-123" },
+        body: JSON.stringify({ model: "claude-test", system: [{ type: "text", text: "policy" }], messages: wireTranscript(20) }),
+      })
+      let failure = null
+      const parts = []
+      const reader = cut.body.getReader()
+      try {
+        for (; ;) {
+          const step = await reader.read()
+          if (step.done) break
+          parts.push(Buffer.from(step.value))
+        }
+      } catch (error) {
+        failure = error
+      }
+      const body = Buffer.concat(parts).toString("utf8")
+      assert.ok(
+        failure !== null,
+        "a client whose stream is cut gets an error, not a clean end reporting a stream that stopped",
+      )
+      assert.ok(!body.includes("message_stop"), "and it is not told the stream completed")
+
+      // --- And Σ, written during that request, survived it. -------------------
+      // The record the daemon writes is MEASURED, not assumed: the seed puts
+      // `files`/`working`/`step` in `state` and the collapse adds `collapsed`
+      // `{from,to}`. There is no `objective` leaf, because nothing in a
+      // daemon-driven request ever calls skill_state — so asserting on one
+      // would test the seed instead of the store surviving the kill.
+      const store = storeModule.createProxyStore({ dir: daemonDir, log: () => {} })
+      const persisted = await store.get(stateModule.stateKey("kill-shared"))
+      const collapsedSpan = persisted?.collapsed
+      assert.equal(
+        typeof collapsedSpan?.from,
+        "number",
+        "the Σ the pass persisted while the stream was in flight is still readable afterwards " +
+          "(" + (collapsedSpan === undefined ? "no record at all" : JSON.stringify(collapsedSpan)) + ")",
+      )
+      assert.equal(typeof collapsedSpan?.to, "number", "and it is a whole collapsed span, not half of one")
+      assert.deepEqual(readdirSync(daemonDir), ["state-kill-shared.json"], "and it left no staging file behind either")
+    } finally {
+      for (const server of [daemon, upstream]) {
+        if (typeof server.closeAllConnections === "function") server.closeAllConnections()
+        await new Promise((resolve) => server.close(() => resolve()))
+      }
+    }
+
+    row("daemon killed mid-stream", "a cut stream errors instead of completing, and Σ survives a SIGKILL")
+  } finally {
+    rmSync(killDir, { recursive: true, force: true })
+  }
 }
 
 await dispose().catch(() => {})

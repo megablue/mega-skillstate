@@ -66,6 +66,17 @@ User-visible behavior: `docs/SPEC.md` → Scope. Build-side host API: `HOST-API-
 pairs intact after every phase, **idempotence (two passes, byte-identical)**, `collapseOlder:false`
 and subagent guards, stale reminder only at a balanced tail.
 
+**`pairing balance fuzz`** — the pairing invariant over 400 seeded transcripts nobody
+wrote by hand: several calls in one message, two results in one message, a call and its
+result in the *same* message, and turns with no tools at all. Per transcript, at **every**
+index, the assertion runs in both directions — where `balanceCuts` says a cut is safe the
+prefix must have no call still waiting, and where it says unsafe that prefix must have one.
+The second direction is what keeps the first from passing vacuously: a fold that answered
+`true` everywhere would fail it. Then `selectPrunableRange` runs on each and the kept
+window is re-checked with `checkPairing`. Seeded, so a failing seed reproduces. This is the
+roadmap's *pairing-balance fuzz (no split pairs across many simulated requests)* — and it
+needs no live host, because a simulated request is exactly what the smoke already builds.
+
 **Byte-level baselines** — the same story as a fixture, so a reshape of the payload passes
 only if it passes every case. `fixtures/golden.json` (8 cases) replays byte-for-byte through
 the OpenCode host: those 8 cases must stay identical across *every* core change, which is

@@ -112,6 +112,13 @@ the daemon's own, and they live in `src/proxy/config.ts` — see
   over the same directory reading the same value, `remove` removing and being
   visible to the other handle, and a directory that does not exist being
   created. It closes by asserting a wild hint cannot write outside the store.
+- `daemon killed mid-stream` — the roadmap's gate case, split in two because it
+  fails in two places. A client reading a stream the upstream cut is asserted to
+  get an **error**, never a clean end reporting a body that omits `message_stop`
+  — the model answering half a reply is what that prevents. And the store's
+  rename atomicity is tested by a real `SIGKILL` in a spawned child process
+  writing real megabytes, plus the same failure written by hand as a truncated
+  staging file (no timing), plus a double write leaving exactly one file.
 
 The last two assertions are the ones worth keeping: they only hold if
 `sanitize` and `pathFor` agree, and a regression in either is invisible in every

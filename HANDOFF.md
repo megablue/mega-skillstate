@@ -9,15 +9,15 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-15`, the tip is `beeb72f` ("Fold the model's own patch bodies
-out of the window the collapse keeps") - `git rev-parse HEAD` for the sha; this
-file does not name itself, because amending the fill-in would rewrite it again.
-`main` is **ahead of `origin/main` by 1** (`beeb72f` is local, not pushed) -
-measured 2026-10-15; the check that never goes stale is `git rev-list --count
-origin/main..HEAD`, because this header cannot re-count itself after it lands.
-Every commit from `9a2be0a` (Phase 1) through `47e8a4f` (the handoff correction)
-is on the remote and the CI run for that pushed tip (`38540464010`) went green on
-both runners. **Push the erosion commit is an open thread.**
+As of `2026-10-15` (refreshed at the condenser commit), the tip is `424b719`
+("Fold Σ's own prose, and keep what the fold takes out") - `git rev-parse HEAD`
+for the sha; this file does not name itself, because amending the fill-in would
+rewrite it again. `main` is **ahead of `origin/main` by 1** (`424b719` is local,
+not pushed) - measured by `git rev-list --count origin/main..HEAD` after that
+commit landed, which is the check that never goes stale, because this header
+cannot re-count itself. Everything through `6937529` is on the remote and the CI
+run for that pushed tip (`38606383441`) went green on both runners. **Push the
+condenser commit is an open thread.**
 
 ## State
 
@@ -104,7 +104,9 @@ both runners. **Push the erosion commit is an open thread.**
   **cap** an old turn's oversized result to head + omission marker + tail
   (`maxResultChars`, 4000, `0` disables; `glob` exempt, because the seed reads
   one). The **Σ size line** is the third lever (`sigmaWarnTokens`, 16000, `0`
-  disables) and it changes only the `/skillstate` report, never the payload.
+  disables); the same threshold now also gates the Σ fold added in `424b719`, so
+  the line and the fold always agree about how big is too big — though the fold can
+  remove what the line complains about, in which case the next report is silent.
   Everything is pinned in the smoke (`erosion`, `erosion idempotence`, `erosion
   config`, `sigma warning`), and the 8 + 9 golden cases stayed byte-identical,
   which is the proof the change was behaviour-neutral where nothing needed
@@ -121,10 +123,37 @@ both runners. **Push the erosion commit is an open thread.**
   dropping one wholesale is a different decision again — whether the host
   forwards the field at all, and in what shape. Nothing here is measured: it
   needs a provider answer first.
-- **Σ condensation (`docs/OPTIMIZATIONS.md` F6) — measured, not shipped.** Σ is
-  findings-dominated in every real session (86.5% PLO1, 79.5% phase2). The
-  warning line ships; a condenser that folds resolved findings does not, and is
-  the obvious next thing to price.
+- **Σ condensation (`docs/OPTIMIZATIONS.md` F6) is CLOSED — shipped in `424b719`.**
+  Σ is findings-dominated in every real session (86.5% PLO1, 79.5% phase2), and
+  `src/core/sigma-condense.ts` now folds it inside `writeSkillState`: gated on
+  `sigmaWarnTokens` (the same line the report complains about, so `0` disables
+  both) with `sigmaCondenseChars` (400, `0` disables) as the floor. Two folds, both
+  decided by a key and never by reading the prose — a finding whose key is another
+  key plus a correction suffix (`_corrected`, `_again`, a closed list) replaces the
+  key it corrects, and a numbered series of three or more (`probe_step3`) keeps only
+  its newest member; a finding over the floor keeps its head and its tail. What
+  leaves the render goes to the record's **archive**: cold (`render` never emits
+  it), bounded oldest-first with the newest entry never the one dropped
+  (`MAX_ARCHIVE_CHARS` 262144). **There is no read path yet**, so the archive is a
+  human backstop rather than the model's memory. The floor, not the mechanism, is
+  the decision, and it was measured from the store first: 400 removes 17.6K / 13.3K
+  / 7.5K tokens on the three live sessions, 800 only 3.9K / 4.5K / 5.5K. Key
+  supersession on its own is about 3K characters — hygiene, because the merge
+  already replaces a same-key value — so the length fold is the lever.
+- **Three defects the condensation gate found, all fixed in `424b719`.** (1) The
+  fold's marker arithmetic reserved its width by measuring a *built placeholder*,
+  and a concatenated number contributes its digits rather than its digit count: a
+  folded finding came out 404 characters against a 400 floor, so the fold was not
+  idempotent. (2) The archive's original bound (65536) made its eviction drain
+  itself to empty on a 90000-character fold, so the write persisted
+  `archive: undefined` and destroyed exactly the text the archive exists to keep —
+  the bound has to be generous *relative to the size gate*, because one fold pass
+  can set aside tens of thousands of characters. (3) **Pre-existing and shipped
+  since the erosion commit:** `cappedResultText` returned the head's *count*
+  instead of the head, so every capped tool result began with a number where the
+  text it kept should have been; the smoke's `<= 4000` assertion passed because a
+  four-character number is a very short string. Capped payload bytes changed here —
+  if a result's exact bytes matter, re-measure rather than recall.
 
 - **Closed — the `golden-pi.json` replay is in the gate.** `93eb25c` added
   it: `smoke.mjs` replays `fixtures/golden-pi.json` (7 cases) byte-for-byte
@@ -147,14 +176,15 @@ both runners. **Push the erosion commit is an open thread.**
   `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
   through `cutReport` throws, and comparing the raw return never matches.
   Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
-- **Push — one commit owed.** Everything in the State section above plus the
-  Phase 3 work through `6d52475` is pushed; only `2052fbf` is local (measured
-  `origin/main..HEAD` = 1). The remote was at `9a2be0a` for most of
-  Phase 2, which is why the runs for those commits were green long after the
-  fact. The run for the first push of the batch (`38387263678`) was red at
-  `npm ci` — the lock file lagged the `1d34a5a` peerDependencies — and
-  `7f23890` fixed it, with run `38388970742` green on both runners. The
-  newest pushed tip (`6d52475`) is run `38540464010`, green on both runners.
+- **Push — one commit owed.** Everything through `6937529` (the ROADMAP §10
+  measurement) is pushed and its run (`38606383441`) is green on both runners;
+  only `424b719` is local (measured `origin/main..HEAD` = 1 at handover). The run
+  for the first push of the Phase 2 batch (`38387263678`) was red at `npm ci` —
+  the lock file lagged the `1d34a5a` peerDependencies — and `7f23890` fixed it,
+  with run `38388970742` green on both runners. Two traps from that history are
+  worth keeping: a run is *named* after its tip commit but is not necessarily
+  *caused* by it (read which step failed before theorising about the cause), and a
+  `peerDependencies` change must regenerate the lock in the same commit.
 - **The CLI runs the refactored code (measured 2026-10-14 18:30).** Both
   installed scopes — project `.opencode/plugin/mega-skillstate` and user
   `~/.config/opencode/plugins/mega-skillstate` — hold the *refactored* tree
@@ -240,14 +270,13 @@ both runners. **Push the erosion commit is an open thread.**
 
 ## Local-only state (not on the remote)
 
-- One commit is local-only: `beeb72f` ("Fold the model's own patch bodies out of
-  the window the collapse keeps"). Everything else in the State section above is
-  on `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
-  `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`),
-  and the run for the pushed tip (`38540464010`) is green on both runners. The
-  one red run (`38387263678`, named after a docs-only commit but actually the
-  `npm ci` EUSAGE on the lock file) was fixed by `7f23890` and is history, not
-  an open thread.
+- One commit is local-only: `424b719` ("Fold Σ's own prose, and keep what the fold
+  takes out"). Everything else is on `github.com/megablue/mega-skillstate` (`main`,
+  with a CI workflow running `typecheck` + `smoke` on ubuntu and windows, node 22,
+  and a `FUNDING.yml`), and the run for the pushed tip (`6937529`, run
+  `38606383441`) is green on both runners. The one red run (`38387263678`, named
+  after a docs-only commit but actually the `npm ci` EUSAGE on the lock file) was
+  fixed by `7f23890` and is history, not an open thread.
 - `~/.config/opencode/mega-skillstate.json` — the live user config; one entry
   beyond the defaults (`feature_map` in `trackTools`). A delete just gets it
   rewritten on the next load; the smoke redirects `MEGA_SKILLSTATE_CONFIG`

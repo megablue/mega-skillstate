@@ -346,7 +346,8 @@ already stands for turns 2-18; nothing left to collapse this pass" — a
 "the next request carries the collapsed payload", was untrue on that pass and was
 removed in `82f9d1c`; the erosion itself shipped in `beeb72f` and is recorded
 here, because the measurement that decided it corrected the one this section
-previously carried.
+previously carried. The same command again, now that the erosion is installed,
+is recorded under *What the erosion bought, measured live* below.
 
 ### What the live number decomposes into
 
@@ -401,6 +402,29 @@ still read the raw conversation. Both cuts are idempotent by construction (a fol
 patch is a string and the fold only rewrites plain objects; a capped value is
 already under its budget), and the live turn is never touched. The golden
 fixtures did not move, which is the point of keeping them byte-identical.
+
+### What the erosion bought, measured live
+
+The reading that opened this section was taken *before* the erosion shipped. The
+same `/skillstate now`, on the same session, now prints `context 66625 ->
+125541 tokens` with "Σ already stands for turns 2-47".
+
+- **`tokensBefore` fell 417,369 -> 66,625** — the sixfold cut this section was
+  written to find, measured on the live host rather than in a probe. Both
+  installed scopes carry `src/core/erosion.ts` byte-identical (SHA `3B97BD94`,
+  40 files each), which is what retires F7's "nothing here is live until a
+  reinstall" caveat.
+- **The collapse advanced from turns 2-18 to turns 2-47** — 29 more turns folded
+  since the reading quoted at the top of this section.
+- **Σ is now 58,916 tokens, 47% of the payload.** With nothing left to fold, the
+  pass removes nothing and re-inserts Σ, so `tokensAfter` exceeds `tokensBefore`
+  by Σ's whole size. That delta is a constant rather than a result — the same
+  failure family as the third line removed in `82f9d1c` — and it cannot fall
+  until Σ is condensed.
+
+So the saving lives in the comparison between two requests' `tokensBefore`, which
+the command never prints side by side, while the printed delta measures only Σ's
+price. That is why the next lever is condensation and not another body cut.
 
 ### What the two-causes table got wrong, and what the correction buys
 
@@ -460,5 +484,7 @@ nothing new. This is also why the golden fixtures did not move.
   trailing brace, suggesting an enriched refusal naming the parse error and
   position plus a tolerant repair for that one class; F1's second half (validation
   after persistence); F3 (step fused with the payload); F4 (model-authored
-  objective garble); F5 (ack ambiguity); F7 (the installed copy lags the repo, so
-  nothing here is live until a reinstall and a restart).
+  objective garble); F5 (ack ambiguity); F7 (partly retired — both installed
+  scopes now carry `erosion.ts` byte-identical at SHA `3B97BD94`, so the erosion
+  is live; what remains of F7 is only a host process older than the refresh
+  needing a restart).

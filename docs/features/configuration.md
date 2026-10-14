@@ -3,7 +3,7 @@
 Status: shipped (v0.2) · Read when: a setting does not take effect; where a config
 value comes from; the user-level `mega-skillstate.json`; which file wins; the plugin
 writing a config file on first run; an unknown key refusing to load; the smoke test
-touching the real home.
+touching the real home; the daemon's port, upstream, codec or Σ directory.
 
 ## What it does
 
@@ -35,6 +35,15 @@ touching the real home.
 - `scripts/smoke.mjs` — the `user config` / `config layers` rows: the redirected
   `MEGA_SKILLSTATE_CONFIG` scratch file, the defaults written, the
   never-rewrite proof, the ladder order, the malformed-file refusal.
+- `src/proxy/config.ts` — the daemon's own surface, which reuses the core's
+  rules by delegation rather than by a second copy: `resolveProxyConfig`
+  (strict; `port`, `host`, `upstream`, `codec`, `dir`, `fallbackSession`, the rest
+  handed to `resolveConfig`), `resolveProxyOptions` (the layered merge),
+  `proxyConfigPath`, `PROXY_CONFIG_ENV`, `codecOf`, `DEFAULT_PORT`.
+- `scripts/smoke.mjs` — the **proxy config** row: upstream/codec refused when
+  absent, a typo refused on either side of the split, the exact defaults pinned,
+  core keys reaching `policy` untouched, `debug` resolving once to the value the
+  core resolved, the override above the file, and a BOM tolerated.
 
 ## How & why
 
@@ -83,6 +92,21 @@ The 12 keys and their defaults are documented per feature — see **Related** be
 for the page that owns each. This page owns only where a value comes from:
 `DEFAULT_CONFIG` < `options.json` < `~/.config/opencode/mega-skillstate.json` < the
 host's plugin entry.
+
+**The daemon's settings are a second, separate surface**, in
+`src/proxy/config.ts` (Phase 3). It carries `upstream` and `codec` — **with no
+default on purpose** — because a daemon that forwards nowhere is a mistake, and
+one that speaks the wrong wire sends the model an empty conversation with
+nothing anywhere reporting it. `host` defaults to `127.0.0.1` because the daemon
+forwards credentials it does not hold. `dir` is optional: with one Σ survives the
+process, without one the daemon collapses in memory and a restart resumes empty
+— the degraded mode every host without a storage seam gets. `port` is `8787`, and
+`fallbackSession` is `"shared"`, with the sharing trap documented in
+[proxy-session-store.md](proxy-session-store.md). The 12 collapse keys reach the
+daemon **by delegation** to `resolveConfig`, not by a second copy of the rules:
+`debug` exists in both key sets and is left entirely to the core, so it resolves
+once. That is the shape to copy — duplicating the strictness is how the two
+surfaces drift apart, and one of them drifts silently.
 
 ## Tests that pin it
 

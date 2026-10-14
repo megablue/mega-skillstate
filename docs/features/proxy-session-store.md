@@ -97,7 +97,8 @@ answer is a *degraded* store, not a broken turn.
 | `dir` | none (required) | where Σ lives; created on demand, nested paths included |
 
 No keys are read from `options.json`: thresholds, the port and the upstreams are
-the daemon's, and this is Phase 3's later slice.
+the daemon's own, and they live in `src/proxy/config.ts` — see
+[configuration.md](configuration.md) for the second surface and its defaults.
 
 ## Tests that pin it
 

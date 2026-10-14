@@ -1947,6 +1947,104 @@ console.log("")
   }
 }
 
+// ---------------------------------------------------------------------------
+// The daemon's own config: the one module whose failures are all silent ones.
+//
+// A wrong daemon setting does not throw at the moment it matters - it produces a
+// process that forwards nowhere, binds to a network, or silently ignores a
+// collapse threshold the operator set. So the pin asserts the strictness rather
+// than merely the happy path: every key that must be named IS named, every key
+// that must be refused IS refused, and the core's collapse keys survive the split
+// into this module's own namespace unchanged.
+//
+// The debug delegation is the assertion worth the most: `debug` exists in BOTH
+// key sets, and the day someone adds it to the daemon's own list, a config file
+// setting `debug: true` resolves twice - or resolves to the wrong place - and
+// here is where that becomes visible instead of a log line that never appears.
+// ---------------------------------------------------------------------------
+{
+  const configModule = await load("src/proxy/config.ts")
+  const coreConfig = await load("src/core/config.ts")
+  assert.equal(typeof configModule.resolveProxyConfig, "function", "the daemon config must export its resolver")
+  assert.equal(typeof configModule.resolveProxyOptions, "function", "and its option layering")
+  assert.equal(typeof configModule.codecOf, "function", "and its codec mapping")
+
+  const complete = { upstream: "https://api.anthropic.com", codec: "anthropic" }
+  const resolves = (raw) => configModule.resolveProxyConfig(raw)
+
+  // --- The two keys with no default must be named, or refused. --------------
+  assert.throws(() => resolves({ codec: "anthropic" }), /upstream/, "a daemon with no upstream is refused, not defaulted")
+  assert.throws(() => resolves({ upstream: "https://api.anthropic.com" }), /codec/, "as is one with no codec named")
+  assert.throws(() => resolves({ ...complete, codec: "gemini" }), /codec/, "an unknown wire is refused rather than guessed")
+  assert.throws(() => resolves({ ...complete, upstream: "not-a-url" }), /upstream/, "and so is an unforwardable upstream")
+  assert.throws(() => resolves({ ...complete, upstream: "ftp://x/" }), /upstream/, "a non-http scheme is refused too")
+
+  // --- A typo is a config error, not a silently ignored one. ---------------
+  assert.throws(() => resolves({ ...complete, minn: 4 }), /is not a key this daemon reads/, "an unknown key is refused")
+  assert.throws(() => resolves({ ...complete, nope: true }), /is not a key this daemon reads/, "on either side of the split")
+
+  // --- The defaults are the ones that must not drift. -----------------------
+  const plain = resolves(complete)
+  assert.equal(plain.port, 8787, "port defaults to 8787")
+  assert.equal(plain.host, "127.0.0.1", "host defaults to loopback, not to every interface")
+  assert.equal(plain.fallbackSession, "shared", "the fallback session defaults")
+  assert.equal(plain.dir, undefined, "dir is optional: a memory-only daemon is a real mode, not a broken one")
+  assert.equal(plain.debug, false, "debug defaults off")
+  assert.equal(Object.isFrozen(plain), true, "and the resolved config is frozen, as the core's is")
+
+  // --- The core's keys survive the split untouched. -------------------------
+  const tuned = resolves({ ...complete, min: 6, keepRecentTurns: 2, seedFromTools: false })
+  assert.equal(tuned.policy.min, 6, "a core key reaches the policy it belongs to")
+  assert.equal(tuned.policy.keepRecentTurns, 2, "and so does its neighbour")
+  assert.equal(tuned.policy.seedFromTools, false, "including the boolean ones")
+  assert.equal(tuned.policy.enabled, true, "while the keys left out fall through to the default")
+
+  // --- `debug` lives in both namespaces; it must resolve exactly once. ------
+  const loud = resolves({ ...complete, debug: true })
+  assert.equal(loud.debug, true, "debug is honoured when set")
+  assert.equal(loud.policy.debug, true, "and it is the SAME value the core resolved, not a second opinion")
+  assert.equal(configModule.DEFAULT_PORT, 8787, "the port default is exported, so it is one number not three")
+
+  // --- The codec mapping cannot be assembled wrongly. -----------------------
+  const anthropic = configModule.codecOf(plain)
+  assert.equal(typeof anthropic.decode, "function", "an anthropic daemon gets the anthropic codec")
+  assert.equal(typeof configModule.codecOf(resolves({ ...complete, codec: "openai" })).decode, "function", "and an openai one gets openai")
+
+  // --- The layers, in specificity order. ------------------------------------
+  const configDir = mkdtempSync(join(tmpdir(), "mega-skillstate-daemon-config-"))
+  try {
+    // A BOM is tolerated, as the core tolerates it: an editor that writes one has
+    // still written JSON. Written as bytes so no editor or shell adds one twice.
+    const withBom = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(
+        JSON.stringify({ upstream: "https://from-file.example", codec: "openai", port: 9001 }),
+        "utf8",
+      ),
+    ])
+    writeFileSync(join(configDir, "proxy.json"), withBom)
+    const merged = configModule.resolveProxyOptions({ port: 9002, dir: configDir }, join(configDir, "proxy.json"))
+    assert.equal(merged.upstream, "https://from-file.example", "the config file's keys come through")
+    assert.equal(merged.codec, "openai", "and so does its codec")
+    assert.equal(merged.port, 9002, "while the more specific layer overrides the one below it")
+    const fromFile = configModule.resolveProxyConfig(merged)
+    assert.equal(fromFile.port, 9002, "resolving the whole thing keeps the override")
+    assert.equal(fromFile.codec, "openai", "and the file's wire choice")
+    assert.equal(fromFile.dir, configDir, "with the directory that was set last")
+  } finally {
+    rmSync(configDir, { recursive: true, force: true })
+  }
+
+  // A missing config file is nothing at all, as every other layer treats it.
+  assert.deepEqual(
+    configModule.resolveProxyOptions({ ...complete }, join(tmpdir(), "mega-skillstate-does-not-exist.json")),
+    { ...complete },
+    "a config file that is not there contributes nothing, and does not error",
+  )
+
+  row("proxy config", "strict, no default for upstream or wire, the core's keys reach their own home")
+}
+
 await dispose().catch(() => {})
 rmSync(scratchHome, { recursive: true, force: true })
 console.log("\nsmoke: ok")

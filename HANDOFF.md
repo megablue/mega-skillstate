@@ -9,13 +9,16 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of `2026-10-13`, the tip is `7f23890` ("Regenerate the lock file for
-the five Pi peerDependencies") - `git rev-parse HEAD` for the sha; this file
+As of `2026-10-14`, the tip is `2052fbf` ("Pin the pairing fuzz and the kill
+case the Phase 3 gate still owed") - `git rev-parse HEAD` for the sha; this file
 does not name itself, because amending the fill-in would rewrite it again.
-`main` is **level with `origin/main`** (ahead by 0). Every commit from
-`9a2be0a` (Phase 1) through `7f23890` (the lock fix) is on the remote, and
-the CI run for the tip (`38388970742`) went green on both runners. Nothing is
-local-only any more - push is not an open thread.
+`main` is **ahead of `origin/main` by 2** (`2052fbf` and this handoff
+correction are local, not pushed) - measured 2026-10-14; the check that never
+goes stale is `git rev-list --count origin/main..HEAD`, because this header
+cannot re-count itself after it lands. Every commit from
+`9a2be0a` (Phase 1) through `6d52475` (the two wiring setup
+docs) is on the remote, and the CI run for that pushed tip (`38540464010`)
+went green on both runners. **Push is an open thread.**
 
 ## State
 
@@ -114,23 +117,35 @@ local-only any more - push is not an open thread.
   `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
   through `cutReport` throws, and comparing the raw return never matches.
   Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
-- **Push — done.** All 13 commits above are pushed: `9a2be0a` (Phase 1)
-  through `7f23890` (the lock fix). The remote was at `9a2be0a` for most of
+- **Push — one commit owed.** Everything in the State section above plus the
+  Phase 3 work through `6d52475` is pushed; only `2052fbf` is local (measured
+  `origin/main..HEAD` = 1). The remote was at `9a2be0a` for most of
   Phase 2, which is why the runs for those commits were green long after the
   fact. The run for the first push of the batch (`38387263678`) was red at
   `npm ci` — the lock file lagged the `1d34a5a` peerDependencies — and
-  `7f23890` fixed it, with run `38388970742` green on both runners.
-- **The CLI still runs pre-refactor code.** Both installed scopes —
-  project `.opencode/plugin/mega-skillstate` and user
-  `~/.config/opencode/plugins/mega-skillstate` — are Oct-9 snapshots of the
-  *flat* `src/` (12 files, no `core/` or `adapters/`, old `server.ts` →
-  `./src/index.ts`). Nothing is broken (old code, byte-identical behaviour),
-  but Phase 1 is not live. To put it live: `npm run plugin:install` and
-  `npm run plugin:install:project`, then restart OpenCode, then spot-check
-  the `mega_state` message id and `/skillstate`. The host serves whichever
-  copy it loaded — a restart is what swaps it. `npm run plugin:status` reports
-  what is installed; `npm run plugin:uninstall` removes it
-  (`scripts/install.ts` is the one script behind all four).
+  `7f23890` fixed it, with run `38388970742` green on both runners. The
+  newest pushed tip (`6d52475`) is run `38540464010`, green on both runners.
+- **The CLI runs the refactored code (measured 2026-10-14 18:30).** Both
+  installed scopes — project `.opencode/plugin/mega-skillstate` and user
+  `~/.config/opencode/plugins/mega-skillstate` — hold the *refactored* tree
+  (`server.ts` → `src/adapters/opencode/index.ts`). This bullet previously
+  claimed the opposite (Oct-9 flat-`src/` snapshots, Phase 1 not live) and that
+  claim was **wrong**; it was true once, and was never re-measured before
+  being repeated. What the measurement actually showed: 29 of 31 `src/` files
+  byte-identical to the repo, the forced-report fix already inside the
+  installed `skill-state-command.ts`, and the host restarted 9 seconds after
+  the last install (12:13:28 → 12:13:37). **Measure before asserting; a stale
+  handoff line is still wrong when it is confidently repeated.** Both scopes
+  were then refreshed anyway (`plugin:install` + `plugin:install:project`,
+  39 files each, `plugin:status` now "in sync" for both) because that is free
+  and removes the question. The two files an earlier `src/`-only check missed
+  as absent were `src/proxy/config.ts` and `src/proxy/mcp.ts`; the plugin
+  half never imports `src/proxy/` (grep: 2 comment lines in `ports.ts` only),
+  so their absence never affected the running host. The remaining live-verification
+  field work is the **daemon** (Claude Code / Codex pointed at it), which no
+  install script can settle. `npm run plugin:status` reports what is
+  installed; `npm run plugin:uninstall` removes it (`scripts/install.ts` is
+  the one script behind all three).
 - The **Pi adapter has never been driven by a real Pi host.** Its gate is a
   fake `ExtensionAPI` built from installed `.d.ts` shapes, which is honest
   about registration and storage and says nothing about whether Pi restores
@@ -195,11 +210,12 @@ local-only any more - push is not an open thread.
 
 ## Local-only state (not on the remote)
 
-- Nothing is local-only any more. Everything in the State section above is on
-  `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
+- One commit is local-only: `2052fbf` ("Pin the pairing fuzz and the kill case
+  the Phase 3 gate still owed"). Everything else in the State section above is
+  on `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
   `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`),
-  and the run for the tip (`38388970742`) is green on both runners. The one
-  red run (`38387263678`, named after a docs-only commit but actually the
+  and the run for the pushed tip (`38540464010`) is green on both runners. The
+  one red run (`38387263678`, named after a docs-only commit but actually the
   `npm ci` EUSAGE on the lock file) was fixed by `7f23890` and is history, not
   an open thread.
 - `~/.config/opencode/mega-skillstate.json` — the live user config; one entry

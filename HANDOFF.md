@@ -9,15 +9,16 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of the read-path commit, the tip is `0e0e298` ("Read the fold back:
-`/skillstate <key>` and `/skillstate archive`) - `git rev-parse HEAD` for the sha;
+As of the model-side recall commit, the tip is `d38a8d4` ("Let the model read
+back what the Sigma fold set aside") - `git rev-parse HEAD` for the sha;
 this file does not name itself, because amending the fill-in would rewrite it
-again. `main` is **ahead of `origin/main` by 1** (`0e0e298` is local, not pushed) -
+again. `main` is **ahead of `origin/main` by 1** (`d38a8d4` is local, not pushed) -
 measured by `git rev-list --count origin/main..HEAD` after that commit landed,
 which is the check that never goes stale, because this header cannot re-count
 itself. Everything through `c63da54` is on the remote and the CI run for that
-pushed tip (`38613861197`) went green on both runners. **Push the read-path commit
-is an open thread.**
+pushed tip (`38613861197`) went green on both runners. **Push is the user's
+call: every commit since `c63da54` is local, so it is unverified on CI rather
+than green.** State it that way rather than paraphrasing an older green run.
 
 ## State
 
@@ -134,9 +135,16 @@ is an open thread.**
   its newest member; a finding over the floor keeps its head and its tail. What
   leaves the render goes to the record's **archive**: cold (`render` never emits
   it), bounded oldest-first with the newest entry never the one dropped
-  (`MAX_ARCHIVE_CHARS` 262144). It reads back through `/skillstate <key>`, which prints
-  one entry in full, and `/skillstate archive`, which lists what was set aside; both
-  answer without a payload, because the archive is durable. The floor, not the
+  (`MAX_ARCHIVE_CHARS` 262144). It reads back two ways. By the user:
+  `/skillstate <key>`, which prints one entry in full, and `/skillstate archive`,
+  which lists what was set aside; both answer without a payload, because the
+  archive is durable. By the model: `skill_state` with a `recall` property
+  (`d38a8d4`) — a key prints it in full, `recall` as the word `archive` lists the
+  archive, a recall performs no write, advances no step and persists nothing, and
+  the reserved word is decided by the same function (`recallAsk`) the command
+  parses with, so the two routes share one wording. The dispatch lives in
+  `runSkillState` in the core rather than in either adapter (Pi hands the
+  parameters over as the second of five arguments, OpenCode as the first of two). The floor, not the
   mechanism, is the decision, and it was measured from the store first: 400 removes
   17.6K / 13.3K
   / 7.5K tokens on the three live sessions, 800 only 3.9K / 4.5K / 5.5K. Key
@@ -168,13 +176,15 @@ is an open thread.**
   Pinned by the `skillstate archive` and `skillstate recall` rows — the decisive
   assertion is that the reply contains the *middle* of the folded value while the
   render does not (a literal marker, not a filler window, because the filler repeats
-  by period). **The installed copies lagged this commit by five files and were
-  re-synced the same day (`plugin:status` "in sync", 41 files each); a host restart
-  is what loads it, and until that restart the live `/skillstate` has no archive
-  clause and no recall.** A *model-callable* recall is deliberately not built — a
-  `skill_state` argument would change `TOOL_INPUT`, the wire tools listing and
-  therefore both golden fixtures, and the host's `required: ["state_patch"]` gate
-  would need a no-op patch or a schema change. That is a scope call for the user.
+  by period). **The model-callable read was built after all, at `d38a8d4`.** The
+  two reasons it was called out of scope (`TOOL_INPUT` would change and the
+  `required: ["state_patch"]` host gate would refuse a recall-only call) both
+  measured wrong: `TOOL_INPUT` has no `required` array at all, so a recall-only
+  call passes the host's pre-`execute` validation untouched and the either-or rule
+  is enforced inside `execute` instead. What it *did* cost was the state-message
+  footer and the tool description, whose bytes the golden fixtures pin — both
+  fixtures were re-captured, and the diff was exactly the new footer sentence plus
+  its token cost. **A scope call for the user is a hypothesis until it is measured.**
 
 - **Closed — the `golden-pi.json` replay is in the gate.** `93eb25c` added
   it: `smoke.mjs` replays `fixtures/golden-pi.json` (7 cases) byte-for-byte
@@ -197,10 +207,10 @@ is an open thread.**
   `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
   through `cutReport` throws, and comparing the raw return never matches.
   Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
-- **Push — one commit owed, and it moved.** Everything through `c63da54` is
+- **Push — one commit owed, and it moved twice.** Everything through `c63da54` is
   pushed and its run (`38613861197`) is green on both runners; `424b719` and
-  `c63da54` went up together, and `0e0e298` (the read path) is now the local one
-  (measured `origin/main..HEAD` = 1 at handover). The run
+  `c63da54` went up together, and the local one is now `d38a8d4` (the model-side
+  recall), measured `origin/main..HEAD` = 1 at handover. The run
   for the first push of the Phase 2 batch (`38387263678`) was red at `npm ci` —
   the lock file lagged the `1d34a5a` peerDependencies — and `7f23890` fixed it,
   with run `38388970742` green on both runners. Two traps from that history are
@@ -292,8 +302,8 @@ is an open thread.**
 
 ## Local-only state (not on the remote)
 
-- One commit is local-only: `0e0e298` ("Read the fold back: `/skillstate <key>` and
-  `/skillstate archive`"). Everything else is on
+- One commit is local-only: `d38a8d4` ("Let the model read back what the Sigma
+  fold set aside"). Everything else is on
   `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
   `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`), and
   the run for the pushed tip (`c63da54`, run `38613861197`) is green on both

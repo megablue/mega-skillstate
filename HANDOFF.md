@@ -9,16 +9,16 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of the model-side recall commit, the tip is `d38a8d4` ("Let the model read
-back what the Sigma fold set aside") - `git rev-parse HEAD` for the sha;
-this file does not name itself, because amending the fill-in would rewrite it
-again. `main` is **ahead of `origin/main` by 1** (`d38a8d4` is local, not pushed) -
-measured by `git rev-list --count origin/main..HEAD` after that commit landed,
-which is the check that never goes stale, because this header cannot re-count
-itself. Everything through `c63da54` is on the remote and the CI run for that
-pushed tip (`38613861197`) went green on both runners. **Push is the user's
-call: every commit since `c63da54` is local, so it is unverified on CI rather
-than green.** State it that way rather than paraphrasing an older green run.
+As of the roadmap corrections, the tip is `a51c108` ("Correct the roadmap: the
+condenser shipped, and Phase 3's file set landed") - `git rev-parse HEAD` for
+the sha; this file does not name itself, because amending the fill-in would
+rewrite it again. `main` is **ahead of `origin/main` by 2** - `a51c108` and this
+file's own commit, both local and not pushed; `git rev-list --count
+origin/main..HEAD` is the check that never goes stale, because this header
+cannot re-count itself. Everything through `4aa74bd` is on the remote and the CI
+run for that pushed tip (`38685458940`) went green. **Push is the user's call:
+every commit since `4aa74bd` is local, so it is unverified on CI rather than
+green.** State it that way rather than paraphrasing an older green run.
 
 ## State
 
@@ -207,16 +207,24 @@ than green.** State it that way rather than paraphrasing an older green run.
   `capture-golden.mjs` does (lines 510, 527-528), then compare; running it
   through `cutReport` throws, and comparing the raw return never matches.
   Rows are named `pi golden: <name>`, plus the `pi golden payloads` row.
-- **Push — one commit owed, and it moved twice.** Everything through `c63da54` is
-  pushed and its run (`38613861197`) is green on both runners; `424b719` and
-  `c63da54` went up together, and the local one is now `d38a8d4` (the model-side
-  recall), measured `origin/main..HEAD` = 1 at handover. The run
-  for the first push of the Phase 2 batch (`38387263678`) was red at `npm ci` —
-  the lock file lagged the `1d34a5a` peerDependencies — and `7f23890` fixed it,
-  with run `38388970742` green on both runners. Two traps from that history are
-  worth keeping: a run is *named* after its tip commit but is not necessarily
-  *caused* by it (read which step failed before theorising about the cause), and a
-  `peerDependencies` change must regenerate the lock in the same commit.
+- **Push — level with the remote through `4aa74bd`, and two commits local.**
+  Everything through `4aa74bd` is pushed and its run (`38685458940`) is green on
+  both runners; the local commits are the roadmap corrections (`a51c108`) and
+  this file's own refresh, both unverified on CI. The older history keeps its
+  two traps: the run for the first push of the Phase 2 batch (`38387263678`) was
+  red at `npm ci` — the lock file lagged the `1d34a5a` peerDependencies — and
+  `7f23890` fixed it, with run `38388970742` green on both runners. A run is
+  *named* after its tip commit but is not necessarily *caused* by it (read which
+  step failed before theorising about the cause), and a `peerDependencies` change
+  must regenerate the lock in the same commit.
+- **Phase 3 is all but closed — the live manual runs are the only gate part
+  left.** The daemon (`faa6dc3`), both codecs (`11962a5`), session identity and
+  the store (`10ef2a5`), the MCP server (`30bc1a3`), the daemon config
+  (`0a7d852`) and the two setup docs (`6d52475`, `docs/setup/`) have landed, and
+  codec golden tests, the pairing fuzz and the kill case are pinned in the
+  smoke. Both setup docs state plainly that their configuration has never been
+  run live — that run is the remaining work, and the roadmap now reads the same
+  way (`a51c108`).
 - **The CLI runs the refactored code (measured 2026-10-14 18:30).** Both
   installed scopes — project `.opencode/plugin/mega-skillstate` and user
   `~/.config/opencode/plugins/mega-skillstate` — hold the *refactored* tree
@@ -302,14 +310,14 @@ than green.** State it that way rather than paraphrasing an older green run.
 
 ## Local-only state (not on the remote)
 
-- One commit is local-only: `d38a8d4` ("Let the model read back what the Sigma
-  fold set aside"). Everything else is on
+- Two commits are local-only: the roadmap corrections (`a51c108`) and this
+  file's own refresh. Everything else is on
   `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
   `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`), and
-  the run for the pushed tip (`c63da54`, run `38613861197`) is green on both
-  runners. The one red run (`38387263678`, named
-  after a docs-only commit but actually the `npm ci` EUSAGE on the lock file) was
-  fixed by `7f23890` and is history, not an open thread.
+  the run for the pushed tip (`4aa74bd`, run `38685458940`) is green on both
+  runners. The one red run (`38387263678`, named after a docs-only commit but
+  actually the `npm ci` EUSAGE on the lock file) was fixed by `7f23890` and is
+  history, not an open thread.
 - `~/.config/opencode/mega-skillstate.json` — the live user config; one entry
   beyond the defaults (`feature_map` in `trackTools`). A delete just gets it
   rewritten on the next load; the smoke redirects `MEGA_SKILLSTATE_CONFIG`

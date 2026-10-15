@@ -24,10 +24,10 @@ import {
   TOOL_INPUT,
   TOOL_NAME,
   TOOL_OUTPUT,
+  runSkillState,
   sessionIdOf,
   skillStateDescription,
   textResult,
-  writeSkillState,
   type SkillStateWrite,
 } from "../../core/skill-state.ts"
 import type { ResolvedConfig } from "../../core/config.ts"
@@ -71,17 +71,20 @@ export function createSkillState(
     // objects, and the host refuses a result that carries `output` with no schema.
     output: TOOL_OUTPUT,
     execute: async (args: any, context: ToolCallContext): Promise<ToolResult> => {
-      // The whole of the decision — parse, validate, merge, persist, acknowledge — is one
-      // core call. This line is the host's only contribution: where the session id lives,
-      // and which fields of the call are the model's to write.
-      const raw = args as { state_patch?: unknown; step?: unknown; summary?: unknown } | undefined
+      // The whole of the decision — parse, validate, merge, persist, acknowledge, or read
+      // the archive back — is one core call. This line is the host's only contribution:
+      // where the session id lives, and which fields of the call are the model's.
+      const raw = args as
+        | { state_patch?: unknown; step?: unknown; summary?: unknown; recall?: unknown }
+        | undefined
       const write: SkillStateWrite = {
         sessionID: sessionIdOf(context),
         state_patch: raw?.state_patch,
         step: raw?.step,
         summary: raw?.summary,
+        recall: raw?.recall,
       }
-      const outcome = await writeSkillState(write, { storage, config })
+      const outcome = await runSkillState(write, { storage, config })
       return textResult(outcome.text, outcome.output)
     },
   }

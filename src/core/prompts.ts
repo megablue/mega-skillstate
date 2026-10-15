@@ -77,8 +77,9 @@ export function stateMessageText(state: Sigma, span: { from: number; to: number 
   lines.push(
     "",
     "Keep it current: call `skill_state` to set or merge keys, `null` to delete one, and",
-    "`step` to advance the counter. Anything not written here is dropped with the turn",
-    "that knew it.",
+    "`step` to advance the counter. Pass `recall` with a key to read that key back in",
+    "full — out of the archive if the fold set it aside — or `archive` to list what the",
+    "fold set aside. Anything not written here is dropped with the turn that knew it.",
   )
   lines.push("</skill-state>")
   return lines.join("\n")
@@ -96,6 +97,13 @@ export function toolDescription(): string {
     "value deletes the key. A JSON string that encodes the object is parsed as a fallback,",
     "but send the object itself. Pass `step` (integer) to set the step index, and `summary`",
     "for a one-line note about what changed. Keys outside the schema are dropped.",
+    "",
+    "Or read instead of writing: pass `recall` with a key from Σ to print that key in",
+    "full — the archived text if the fold set it aside, its live value otherwise — and",
+    "pass `recall` as `archive` to list what the fold set aside, largest first. A",
+    "recall performs no write, changes no step, and needs no request to have happened.",
+    "Never combine `recall` with `state_patch`, `step` or `summary`: a call is one thing",
+    "or the other.",
     "",
     "Schema:",
     schemaText(),

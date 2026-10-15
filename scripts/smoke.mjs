@@ -2535,7 +2535,7 @@ console.log("")
   const stored = foldHost.storage.map.get(stateModule.stateKey("ses_sigma_fold"))
   const foldedFindings = stored.state.findings
   assert.ok(foldedFindings.long.length <= 400, "the long finding is at or under the floor: " + foldedFindings.long.length)
-  const marker = /\n\[\.\.\. folded (\d+) chars into the archive \.\.\.\]\n/.exec(foldedFindings.long)
+  const marker = /\n\[\.\.\. folded (\d+) chars into the archive; skill_state recall reads it back \.\.\.\]\n/.exec(foldedFindings.long)
   assert.ok(marker !== null, "and it says where the rest went: " + foldedFindings.long.slice(150, 300))
   assert.equal(
     Number(marker[1]) + (foldedFindings.long.length - marker[0].length),
@@ -2596,6 +2596,96 @@ console.log("")
     "a recall needs no payload, unlike the report: " + unseen.slice(0, 140),
   )
   row("skillstate recall", "a folded key returns its full text, middle included, with no payload needed")
+
+  // --- The model-side recall: the same read through the tool. -----------------
+  // The model cannot run `/skillstate` — commands are the user's — so until now the
+  // archive was reachable only by a route the one caller that needs it does not have.
+  // This pins that route: `recall` alone, answered from the durable record, with no
+  // payload and no fold. The middle assertion is the one that carries the weight, and
+  // it is the same middle the command reply hands back.
+  //
+  // The whole block is bounded by one snapshot: every read below must leave Σ, the
+  // archive and the store's call log byte-identical. That pins "a recall writes
+  // nothing" as one invariant rather than three leaf-by-leaf claims, and it cannot be
+  // satisfied by an ordering accident — the assertions run against the snapshot taken
+  // before the first read, not against whatever a later write happens to leave behind.
+  const stateKey = stateModule.stateKey("ses_sigma_fold")
+  const beforeReads = JSON.stringify(foldHost.storage.map.get(stateKey))
+  const setsBeforeReads = foldHost.storage.calls.sets.length
+
+  const toolRecall = await foldHost.tools[0].execute(
+    { recall: "long" },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_recall", id: "call_recall", signal: new AbortController().signal },
+  )
+  const recallText = typeof toolRecall.content === "string" ? toolRecall.content : toolRecall.content.map((part) => part.text).join("\n")
+  assert.equal(toolRecall.output.kind, "recall", recallText)
+  assert.equal(toolRecall.output.key, "long")
+  assert.equal(toolRecall.output.ask, "key")
+  assert.ok(recallText.includes(longMiddle), "the tool hands back the middle the render dropped")
+  assert.ok(!foldedFindings.long.includes(longMiddle), "which the render really does not have")
+  assert.ok(recallText.includes(longValue.slice(-120)), "while the tail the render kept is there too")
+  assert.ok(
+    recallText.includes("folded: the render keeps its head and tail"),
+    "and the wording is the command's own, so the two routes cannot drift: " + recallText.slice(0, 140),
+  )
+
+  const toolListing = await foldHost.tools[0].execute(
+    { recall: "archive" },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_listing", id: "call_listing", signal: new AbortController().signal },
+  )
+  const listingText = typeof toolListing.content === "string" ? toolListing.content : toolListing.content.map((part) => part.text).join("\n")
+  assert.equal(toolListing.output.kind, "recall", listingText)
+  assert.equal(toolListing.output.ask, "archive")
+  assert.equal(toolListing.output.entries, 4)
+  assert.ok(listingText.includes("archive: 4 entries"), "the listing counts what was set aside: " + listingText.slice(0, 100))
+  assert.ok(listingText.includes("long — " + longValue.length), "largest first, with the size that makes it worth recalling")
+
+  // The either-or rule, enforced inside execute rather than by the schema: TOOL_INPUT has
+  // no `required`, so a mixed call passes the host gate untouched and the refusal has to
+  // come from here. Each case leaves Σ exactly as it was.
+  const mixed = await foldHost.tools[0].execute(
+    { recall: "long", state_patch: { objective: "should not be written" }, step: 99 },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_mixed", id: "call_mixed", signal: new AbortController().signal },
+  )
+  const mixedText = typeof mixed.content === "string" ? mixed.content : mixed.content.map((part) => part.text).join("\n")
+  assert.equal(mixed.output.kind, "error", mixedText)
+  assert.ok(mixedText.includes("recall reads and does not write"), mixedText)
+
+  const stepMixed = await foldHost.tools[0].execute(
+    { recall: "long", step: 99 },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_step_mixed", id: "call_step_mixed", signal: new AbortController().signal },
+  )
+  assert.equal(stepMixed.output.kind, "error")
+  assert.ok(
+    (typeof stepMixed.content === "string" ? stepMixed.content : stepMixed.content.map((part) => part.text).join("")).includes(
+      "recall reads and does not write",
+    ),
+    "a recall carrying `step` is refused the same way",
+  )
+
+  const emptyRecall = await foldHost.tools[0].execute(
+    { recall: "   " },
+    { sessionID: "ses_sigma_fold", agent: "build", messageID: "msg_empty", id: "call_empty", signal: new AbortController().signal },
+  )
+  assert.equal(emptyRecall.output.kind, "error")
+  const emptyContent = typeof emptyRecall.content === "string" ? emptyRecall.content : emptyRecall.content.map((part) => part.text).join("")
+  assert.ok(emptyContent.includes("recall must be a key"), "an empty recall says what it wants: " + emptyContent.slice(0, 140))
+
+  // The read halves of the smoke's tool and its host-free core are one function: the tool
+  // is a thin wrapper, and this asserts the wrapper did not become a second brain.
+  const { runSkillState } = await load("src/core/skill-state.ts")
+  const coreRecall = await runSkillState({ sessionID: "ses_sigma_fold", recall: "long" }, { storage: foldHost.storage })
+  assert.ok(coreRecall.text.includes(longMiddle), "the core entry answers the same key")
+
+  // The one invariant the block is bounded by, checked after every read including the
+  // one that went through the core rather than the tool.
+  assert.equal(
+    JSON.stringify(foldHost.storage.map.get(stateKey)),
+    beforeReads,
+    "a recall writes nothing: Σ, the archive and the record are byte-identical",
+  )
+  assert.equal(foldHost.storage.calls.sets.length, setsBeforeReads, "and no recall reached a persist")
+  row("skill_state recall", "the tool reads the archive back, middle included, writing nothing")
 
   // Idempotence: a write carrying no findings leaves both halves byte-identical.
   const heldFindings = JSON.stringify(foldedFindings)

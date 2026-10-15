@@ -124,7 +124,7 @@ function seriesNumber(key: string): number {
  * measured mistake, not a hypothetical one — 400 became 404.
  */
 const FOLD_HEAD = "\n[... folded "
-const FOLD_TAIL = " chars into the archive ...]\n"
+const FOLD_TAIL = " chars into the archive; skill_state recall reads it back ...]\n"
 
 /**
  * A folded finding: the head, a marker naming what left, and the tail.

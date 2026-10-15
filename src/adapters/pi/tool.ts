@@ -24,8 +24,8 @@ import {
   TOOL_INPUT,
   TOOL_NAME,
   TOOL_OUTPUT,
+  runSkillState,
   skillStateDescription,
-  writeSkillState,
 } from "../../core/skill-state.ts"
 import type { ResolvedConfig } from "../../core/config.ts"
 import type { StorageDomain } from "../../core/types.ts"
@@ -68,16 +68,18 @@ export function createPiSkillState(
       _onUpdate: unknown,
       ctx: ExtensionToolContext,
     ): Promise<PiToolResult> => {
-      // The whole decision — parse, validate, merge, persist, acknowledge — is one core
-      // call reaching the same seam the OpenCode tool does. This line is the host's only
-      // contribution: where the session id lives, and which fields are the model's.
+      // The whole decision — parse, validate, merge, persist, acknowledge, or read the
+      // archive back — is one core call reaching the same seam the OpenCode tool does.
+      // This line is the host's only contribution: where the session id lives, and which
+      // fields are the model's.
       const write = {
         sessionID: ctx?.sessionId,
         state_patch: params?.state_patch,
         step: params?.step,
         summary: params?.summary,
+        recall: params?.recall,
       }
-      const outcome = await writeSkillState(write, { storage, config })
+      const outcome = await runSkillState(write, { storage, config })
       return { content: [{ type: "text", text: outcome.text }], details: outcome.output }
     },
   }

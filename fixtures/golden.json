@@ -922,7 +922,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -1114,7 +1114,7 @@
         ],
         "report": {
           "tokensBefore": 3468,
-          "tokensAfter": 3642,
+          "tokensAfter": 3679,
           "window": 128000,
           "keepRecentTurns": 4,
           "turns": 5,
@@ -1843,7 +1843,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-11 of this conversation are no longer in the request.\n\n{\"files\":{\"src/mixed11.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/mixed11.ts\"]},\"step\":1}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-11 of this conversation are no longer in the request.\n\n{\"files\":{\"src/mixed11.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/mixed11.ts\"]},\"step\":1}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -1947,7 +1947,7 @@
         ],
         "report": {
           "tokensBefore": 1265,
-          "tokensAfter": 1410,
+          "tokensAfter": 1448,
           "window": 128000,
           "keepRecentTurns": 2,
           "turns": 3,
@@ -2884,7 +2884,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -3076,7 +3076,7 @@
         ],
         "report": {
           "tokensBefore": 15406,
-          "tokensAfter": 3592,
+          "tokensAfter": 3629,
           "window": 128000,
           "keepRecentTurns": 4,
           "turns": 21,
@@ -4013,7 +4013,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-19 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file19.ts\",\"src/file20.ts\"]},\"step\":2}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-19 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file19.ts\",\"src/file20.ts\"]},\"step\":2}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -4117,7 +4117,7 @@
         ],
         "report": {
           "tokensBefore": 15406,
-          "tokensAfter": 2130,
+          "tokensAfter": 2167,
           "window": 128000,
           "keepRecentTurns": 2,
           "turns": 21,
@@ -5054,7 +5054,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -5256,7 +5256,7 @@
         ],
         "report": {
           "tokensBefore": 3468,
-          "tokensAfter": 3713,
+          "tokensAfter": 3750,
           "window": 128000,
           "keepRecentTurns": 4,
           "turns": 5,
@@ -6194,7 +6194,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -6386,7 +6386,7 @@
         ],
         "report": {
           "tokensBefore": 15406,
-          "tokensAfter": 3642,
+          "tokensAfter": 3679,
           "window": 128000,
           "keepRecentTurns": 4,
           "turns": 21,
@@ -6400,7 +6400,7 @@
           "nudged": false,
           "notes": []
         },
-        "reply": "Σ already stands for turns 2-17; nothing left to collapse this pass\ncontext 3468 -> 3642 tokens"
+        "reply": "Σ already stands for turns 2-17; nothing left to collapse this pass\ncontext 3468 -> 3679 tokens"
       }
     },
     {
@@ -9146,7 +9146,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Anything not written here is dropped with the turn\nthat knew it.\n</skill-state>"
+                "text": "<skill-state>\nΣ — the explicit execution state. This is the record of what the model committed\nthrough `skill_state`; superseded turns are collapsed into it rather than kept.\nRead it before anything else in this request.\n\nCollapsed: turns 2-17 of this conversation are no longer in the request.\n\n{\"files\":{\"src/file17.ts\":\"read\",\"src/file18.ts\":\"read\",\"src/file19.ts\":\"read\",\"src/file20.ts\":\"read\"},\"working\":{\"activeFiles\":[\"src/file17.ts\",\"src/file18.ts\",\"src/file19.ts\",\"src/file20.ts\"]},\"step\":4}\n\nKeep it current: call `skill_state` to set or merge keys, `null` to delete one, and\n`step` to advance the counter. Pass `recall` with a key to read that key back in\nfull — out of the archive if the fold set it aside — or `archive` to list what the\nfold set aside. Anything not written here is dropped with the turn that knew it.\n</skill-state>"
               }
             ]
           },
@@ -9338,7 +9338,7 @@
         ],
         "report": {
           "tokensBefore": 15406,
-          "tokensAfter": 3642,
+          "tokensAfter": 3679,
           "window": 128000,
           "keepRecentTurns": 4,
           "turns": 21,
@@ -9356,7 +9356,7 @@
           "[mega-skillstate] the durable store could not be read for ses_golden_broken: the store is down",
           "[mega-skillstate] the durable store refused state/ses_golden_broken: the store is down",
           "[mega-skillstate] the durable store refused state/ses_golden_broken: the store is down",
-          "[mega-skillstate] context pass: 15406 -> 3642 tokens over 21 turn(s), collapsed 2-17 (48 messages)"
+          "[mega-skillstate] context pass: 15406 -> 3679 tokens over 21 turn(s), collapsed 2-17 (48 messages)"
         ]
       }
     }

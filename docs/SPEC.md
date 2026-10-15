@@ -57,7 +57,10 @@ the text is recoverable rather than destroyed; the archive is bounded oldest-fir
 and the newest fold is never the entry dropped. What was set aside reads back by hand:
 `/skillstate <key>` prints one archived finding in full — for a folded key that is the
 middle its render no longer shows, and for a superseded one it is the only copy left —
-while `/skillstate archive` lists the archive, largest first. Folding is idempotent and inert
+while `/skillstate archive` lists the archive, largest first. The model has the same read
+inside the tool: `skill_state` with `recall` set to a key prints it in full, and `recall`
+as `archive` lists what was set aside, with no write, no step and no payload needed.
+Folding is idempotent and inert
 below the threshold, so a small session's Σ is left exactly as the model wrote it.
 `sigmaCondenseChars: 0` disables it.
 
@@ -119,7 +122,8 @@ the plugin still runs. Read the package `README.md` for install scope.
 Controls the model/user touch: the `skill_state` tool (the model writes a
 `state_patch` — an object, or a JSON string the runtime parses — sets a key to `null` to
 delete it; keys the schema does not own are dropped; a patch that is not an object comes
-back as an error and leaves Σ untouched) and the `/skillstate` command (print the current
-Σ, the measured context, and what is collapsed vs kept; `/skillstate now` collapses
+back as an error and leaves Σ untouched, or passes `recall` with a key to read it back in
+full and `archive` to list what the fold set aside, which writes nothing) and the `/skillstate`
+command (print the current Σ, the measured context, and what is collapsed vs kept; `/skillstate now` collapses
 immediately; `/skillstate <key>` prints one finding in full from the archive; `/skillstate
 archive` lists it).

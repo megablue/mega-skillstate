@@ -207,6 +207,14 @@ export type CommandAsk =
   | { readonly kind: "archive" }
   | { readonly kind: "recall"; readonly key: string }
 
+/** The argument's bare text: trimmed, and undressed of the quotes and backticks a caller adds. */
+function unquoteKey(asked: string): string {
+  return String(asked ?? "")
+    .trim()
+    .replace(/^[`'"]+/, "")
+    .replace(/[`'"]+$/, "")
+}
+
 /**
  * The argument, read once for every host.
  *
@@ -217,14 +225,25 @@ export type CommandAsk =
  * will sometimes dress it up.
  */
 export function parseAsk(asked: string): CommandAsk {
-  const text = String(asked ?? "")
-    .trim()
-    .replace(/^[`'"]+/, "")
-    .replace(/[`'"]+$/, "")
+  const text = unquoteKey(asked)
   if (text.length === 0) return { kind: "report" }
   if (text === "now") return { kind: "now" }
   if (text === "archive") return { kind: "archive" }
   return { kind: "recall", key: text }
+}
+
+/**
+ * The tool's `recall` argument: the listing word, or a key to read back.
+ *
+ * The word `archive` means the same thing here as it does for the command, decided by
+ * this function rather than by each caller, so a recall through `skill_state` and one
+ * through `/skillstate` can never disagree about which word lists the archive. An empty
+ * argument never reaches this: the tool refuses one before opening the record.
+ */
+export function recallAsk(asked: string): { kind: "archive" } | { kind: "key"; readonly key: string } {
+  const text = unquoteKey(asked)
+  if (text === "archive") return { kind: "archive" }
+  return { kind: "key", key: text }
 }
 
 /**

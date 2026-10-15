@@ -26,6 +26,7 @@ import { ackText, toolDescription } from "./prompts.ts"
 import { isPlainObject, render, STATE_KEYS, unknownKeys } from "./schema.ts"
 import { condense, type CondenseReport } from "./sigma-condense.ts"
 import { stateStore, type StateRecord } from "./state.ts"
+import { archiveReport, recallAsk, recallReport } from "./skill-state-command.ts"
 import { estimateTokens } from "./context.ts"
 import type { ResolvedConfig } from "./config.ts"
 import type { StorageDomain } from "./types.ts"
@@ -59,6 +60,11 @@ export const TOOL_INPUT = {
       type: "string",
       description: "One line about what changed, carried alongside Σ and printed by /skillstate.",
     },
+    recall: {
+      type: "string",
+      description:
+        "Read instead of write: a key from Sigma prints in full - the archived text if the fold set it aside, its live value otherwise - or the word archive lists what the fold set aside, largest first. A recall performs no write and advances no step. Never combined with state_patch, step or summary.",
+    },
   },
 }
 
@@ -90,13 +96,15 @@ export interface SkillStateOutcome {
   readonly output: Record<string, unknown>
 }
 
-/** What one write carries. */
+/** What one `skill_state` call carries, whichever kind it is. */
 export interface SkillStateWrite {
   /** The session the write belongs to; without one there is nothing to write to. */
   readonly sessionID: string | undefined
   readonly state_patch?: unknown
   readonly step?: unknown
   readonly summary?: unknown
+  /** A key to read back in full, or the word `archive` to list what the fold set aside. */
+  readonly recall?: unknown
 }
 
 /** The text result, as a value both adapters can wrap. */
@@ -267,4 +275,70 @@ export async function writeSkillState(
   // was, and this is the machine-readable half of the same statement.
   if (condensed !== undefined) output["condensed"] = condensed
   return { text: ackText({ step, changed, dropped, fromString: parsed.fromString }), output }
+}
+
+/**
+ * Run one `skill_state` call, whichever kind it is.
+ *
+ * The call is one thing or the other: a write merges into Σ, and a recall reads what
+ * the fold set aside. The split is decided here rather than in each adapter, because
+ * Pi hands the parameters over as a second argument of five where OpenCode hands them
+ * over as the first of two, and neither host should have to know which branch this
+ * call is.
+ */
+export async function runSkillState(
+  input: SkillStateWrite,
+  options: { readonly storage?: StorageDomain; readonly config?: ResolvedConfig } = {},
+): Promise<SkillStateOutcome> {
+  if (input.recall === undefined) return await writeSkillState(input, options)
+  return await recallSkillState(input, options)
+}
+
+/**
+ * A recall: one key, or the listing, read back in full.
+ *
+ * The archive is durable and needs no live payload, so this half answers in a session
+ * no request has reached — the same property `/skillstate <key>` already has. Nothing
+ * is persisted, no step is advanced and the fold is not re-run: a read that changed Σ
+ * would cost the write's price on the way through.
+ *
+ * The reports are the command's, not copies of them. The same key recalls through the
+ * tool and through `/skillstate` in identical wording, so a session that learned one
+ * route recognises the other, and there is one place to change either.
+ */
+async function recallSkillState(
+  input: SkillStateWrite,
+  options: { readonly storage?: StorageDomain },
+): Promise<SkillStateOutcome> {
+  const storage = options.storage
+  const sessionID = input.sessionID
+  if (sessionID === undefined || sessionID.length === 0) {
+    return {
+      text: "skill_state needs a session: it records the state of the conversation it is called from.",
+      output: { kind: "error" },
+    }
+  }
+  if (input.state_patch !== undefined || input.step !== undefined || input.summary !== undefined) {
+    return {
+      text:
+        "recall reads and does not write: it cannot be combined with state_patch, step or summary. Drop the write fields and ask again with recall alone.",
+      output: { kind: "error" },
+    }
+  }
+  const asked = input.recall
+  if (typeof asked !== "string" || asked.trim().length === 0) {
+    return {
+      text: "recall must be a key to read back in full, or the word archive to list what the fold set aside.",
+      output: { kind: "error" },
+    }
+  }
+  const record = await stateStore(sessionID, { storage })
+  const ask = recallAsk(asked)
+  if (ask.kind === "archive") {
+    return {
+      text: archiveReport(record),
+      output: { kind: "recall", ask: "archive", entries: Object.keys(record.archive()).length },
+    }
+  }
+  return { text: recallReport(ask.key, record), output: { kind: "recall", ask: "key", key: ask.key } }
 }

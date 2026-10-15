@@ -13,6 +13,13 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   runtime merges it (⊕, unknown keys dropped) and returns a compact ack naming what changed,
   what it dropped, and whether a string had to be parsed. No reply to the user is generated
   by a state write.
+- **`skill_state` with `recall`** — the same tool's read half. Passing `recall` with a key
+  prints that key in full out of the session archive (or as it stands, for a key Σ still
+  holds), and `recall` as the word `archive` lists what the fold set aside, largest first.
+  A recall performs no write, advances no step and persists nothing, so it costs no more
+  than its own reply, and — like the command — it needs no live payload, because it answers
+  from the durable record. The two halves are never combined: a call carrying both is
+  refused by name (see the trap in *How & why*).
 - **`/skillstate`** — prints the current Σ, the measured context, and a per-turn index of
   what is collapsed vs kept; **`/skillstate now`** forces a collapse on the current pass.
   When Σ's own render has grown past `sigmaWarnTokens` the report says so, names the
@@ -31,7 +38,7 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
 
 ## Map
 
-- `src/core/skill-state.ts` — the host-free write semantics and tool vocabulary: `TOOL_NAME = "skill_state"`, `TOOL_INPUT` (the parameter contract, a union-typed `state_patch` so a quoted string is decoded rather than refused at the host's gate), `TOOL_OUTPUT`, `skillStateDescription`, `sessionIdOf`, `textResult`, `parsePatch`/`unfence`/`describe` (the tolerant read of `state_patch`), and `writeSkillState` — parse, validate `step`/`summary` **before** the store is opened, ⊕ the patch, handle `Σ.step`, persist, return the text ack and the structured output.
+- `src/core/skill-state.ts` — the host-free write semantics and tool vocabulary: `TOOL_NAME = "skill_state"`, `TOOL_INPUT` (the parameter contract, a union-typed `state_patch` so a quoted string is decoded rather than refused at the host's gate, plus the optional `recall` that turns the call into a read), `TOOL_OUTPUT`, `skillStateDescription`, `sessionIdOf`, `textResult`, `parsePatch`/`unfence`/`describe` (the tolerant read of `state_patch`), `writeSkillState` (parse, validate `step`/`summary` **before** the store is opened, ⊕ the patch, handle `Σ.step`, persist, return the text ack and structured output) and `runSkillState` — the dispatcher: `recall` absent goes to the write, `recall` present to the read half, which reuses the command's `recallAsk`/`recallReport`/`archiveReport` and opens nothing else.
 - `src/core/sigma-condense.ts` — the fold that answers the size line, host-free:
   `condense(findings, archive, { maxChars })` → `{ findings, archive, report }`, with
   `correctedKey` (a closed suffix list, never a prefix — that would merge two different
@@ -39,8 +46,8 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   minimum), `foldedFindingText` (head + marker + tail, the marker charged to the budget)
   and `boundedArchive` (`MAX_ARCHIVE_CHARS`, oldest out first, the newest entry never the
   one dropped). `writeSkillState` is its only caller, through `condensePast`.
-- `src/adapters/opencode/tool.ts` — `createSkillState({ storage, config })` only: the OpenCode envelope (`options: { codemode: false }`, a permissive `output`, the measured details above) whose `execute` maps args to `SkillStateWrite`, awaits `writeSkillState`, and wraps the result with `textResult`. No write logic remains here; it re-exports the core names.
-- `src/core/skill-state-command.ts` — the command's host-free half: `stateBlock`, `turnIndex`, `stateReport` (read a `ContextDescriptor`), the reply phrasings `forcedReport`, `nothingYetReport`, `NOW_HINT`, `COMMAND_NAME = "skillstate"`, and the read path — `parseAsk` (the argument words, shared by both hosts), `recordFor` (the record reached from `deps` rather than from a payload), `recallReport`, `archiveReport`. `StateView` is what the command needs from a record, `archive()` included.
+- `src/adapters/opencode/tool.ts` — `createSkillState({ storage, config })` only: the OpenCode envelope (`options: { codemode: false }`, a permissive `output`, the measured details above) whose `execute` maps args to `SkillStateWrite` (including `recall`), awaits `runSkillState`, and wraps the result with `textResult`. No call logic remains here; it re-exports the core names.
+- `src/core/skill-state-command.ts` — the command's host-free half: `stateBlock`, `turnIndex`, `stateReport` (read a `ContextDescriptor`), the reply phrasings `forcedReport`, `nothingYetReport`, `NOW_HINT`, `COMMAND_NAME = "skillstate"`, and the read path — `parseAsk` (the argument words, shared by both hosts), `recordFor` (the record reached from `deps` rather than from a payload), `recallReport`, `archiveReport`, and `recallAsk` (the tool's `recall` argument, so the reserved word `archive` has exactly one home). `StateView` is what the command needs from a record, `archive()` included.
 - `src/adapters/opencode/command.ts` — `createSkillStateCommand({ deps, payloadOf, reply })` only: it reads `invocation.prompt.text` (`now` means force), looks up the live payload, and answers through the injected `reply` channel. It is the seam a second adapter replaces — Pi takes a **string** arg and answers through `ctx.ui.notify`.
 - `src/core/prompts.ts` — `SECTION_TEXT` (policy), `stateMessageText`, `nudgeText`,
   `toolDescription`, `schemaText`, `ackText` (the ack format).
@@ -73,6 +80,13 @@ User-visible behavior: `docs/SPEC.md` → Compaction (the seam this feeds).
   an object with a soft error that names what arrived. A whole session once looped on that
   refusal, retrying smaller patches, because the message read like a size problem; with the
   union the call lands and the ack reports the parse.
+- **The read half is additive, so the host gate never sees a mixed call.** `TOOL_INPUT`
+  declares no `required` array, so a recall-only call passes the host's pre-`execute`
+  validation untouched and the either-or rule is enforced inside `execute` instead: a call
+  carrying both is refused by name rather than silently granted whichever half happened to
+  be checked first. That is also why adding `recall` moved none of the tools bytes the
+  golden fixtures pin — the fixtures' tools field is the bare name list, and only the
+  state-message footer had to be re-captured.
 - **A state write is durable.** The tool's `execute` loads through `stateStore` (cache first,
   then `storage.get`) and `apply` writes through, so the write outlives the request it came
   from — and the collapse and compaction seams see it on the same pass.
@@ -178,6 +192,11 @@ have, a superseded key is handed back although Σ no longer holds it, the listin
 first with the superseded keys marked, a miss says so rather than throwing, and a session
 with no payload still answers, because a recall does not wait for a request the way the
 report does.
+The **model-side recall** (`skill_state recall`) hands the tool the same read: the *middle* of
+a folded key comes back through `execute`, `recall` as `archive` lists what the fold set
+aside, a call combining `recall` with a `state_patch` or a `step` is refused by name, an
+empty `recall` is refused too, and a before/after snapshot of the whole durable record plus
+the store's set-call count proves that a read wrote nothing.
 
 ## Related
 

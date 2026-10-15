@@ -1,8 +1,9 @@
 # mega-skillstate — Roadmap (portability)
 
-**Status:** active, Phase 3 underway. Phases 1 (core extraction, `9a2be0a`) and
-2 (Pi adapter, through `51adc29`) are landed and gated green; the proxy's two
-codecs are the first Phase 3 slice.
+**Status:** active, Phase 3 all but closed. Phases 1 (core extraction, `9a2be0a`)
+and 2 (Pi adapter, through `51adc29`) are landed and gated green; Phase 3's file
+set (daemon, codecs, session identity, store, MCP server, config, setup docs) is
+landed, and the only part left is the live manual runs on Claude Code and Codex.
 **Decided (2026-10-10, user):** Tier 2 (Claude Code / Codex) goes through a
 **wire-level proxy daemon** (full fidelity). Hooks-only degraded mode is a
 fallback only, not a route.
@@ -223,12 +224,14 @@ the manifest fields are unread. Design is settled; these three gate the code.
   `codec` have **no default on purpose**; `host` binds loopback; `dir` is
   optional (memory-only is a real mode). Pinned by the smoke's `proxy config`
   row.
-- [ ] Claude Code setup doc: `ANTHROPIC_BASE_URL`; optional hook bridge for
+- [x] Claude Code setup doc: `ANTHROPIC_BASE_URL`; optional hook bridge for
       status display; `PreCompact` policy option (default: leave CC's compaction
       alone — our collapse keeps the surface small so it rarely fires).
-- [ ] Codex setup doc: user-level `model_providers.<id>.base_url` +
+      **Landed:** `docs/setup/claude-code.md` (`6d52475`), and pushed.
+- [x] Codex setup doc: user-level `model_providers.<id>.base_url` +
       `wire_api = "responses"`; API-key requirement; ChatGPT-auth →
-      hooks-degraded fallback documented.
+      hooks-degraded fallback documented. **Landed:**
+      `docs/setup/codex.md` (`6d52475`), and pushed.
 - **Gate:** codec golden-transcript tests — **done** (`fixtures/codecs/`, 9
   cases byte-for-byte); live manual runs on CC and Codex with a visible collapse
   — **still owed, needs the operator's own hosts**; pairing-balance fuzz — **done**
@@ -323,16 +326,17 @@ the manifest fields are unread. Design is settled; these three gate the code.
 ## 9. Next step (user's call)
 
 1. ~~**Phase 3, slice 2: the daemon skeleton and session identity.**~~ **Landed**
-   (`10ef2a5`, `faa6dc3`). Session identity was the only genuinely novel piece of
-   Phase 3, because both landed adapters arrived with a native session id while
-   CC and Codex send plain HTTP. What remains of Phase 3: `mcp.ts` (the
-   `skill_state` MCP server sharing the store), `src/proxy/config.ts`, and the
-   two setup docs — then the manual three-quarters of the gate (live runs on CC
-   and Codex with a visible collapse, pairing-balance fuzz, daemon killed
-   mid-stream). The payload-erosion work is deferred below, by user decision.
-2. **Phase 3, slice 3+: mcp.ts, config, setup docs**, closing out the four-part
-   gate (codec golden tests — done; live manual runs on CC and Codex with a
-   visible collapse; pairing-balance fuzz; daemon killed mid-stream).
+   (`10ef2a5`, `faa6dc3`), and the three items this section then listed as
+   remaining have landed too: `mcp.ts` (`30bc1a3`), `src/proxy/config.ts`
+   (`0a7d852`), and the two setup docs (`6d52475`). Session identity was the
+   only genuinely novel piece of Phase 3, because both landed adapters arrived
+   with a native session id while CC and Codex send plain HTTP. What remains of
+   Phase 3: the **live manual runs on CC and Codex** with a visible collapse —
+   the one gate part a smoke test cannot pin. The payload-erosion record is §10.
+2. **Phase 3 close-out: the live manual runs.** Point each host at the daemon
+   per `docs/setup/claude-code.md` / `docs/setup/codex.md` and confirm a
+   collapse in a real session; everything else is pinned (codec golden tests,
+   the pairing fuzz and the kill case are smoke rows).
 3. **DSH (Phase 4) spike** — still worth resolving while the core is a single
    shape, but Phase 3 is the chosen Tier 2 route and takes precedence.
 4. **Adjust the roadmap** — edit `docs/ROADMAP.md` first (it ships as its
@@ -419,12 +423,15 @@ same `/skillstate now`, on the same session, now prints `context 66625 ->
 - **Σ is now 58,916 tokens, 47% of the payload.** With nothing left to fold, the
   pass removes nothing and re-inserts Σ, so `tokensAfter` exceeds `tokensBefore`
   by Σ's whole size. That delta is a constant rather than a result — the same
-  failure family as the third line removed in `82f9d1c` — and it cannot fall
-  until Σ is condensed.
+  failure family as the third line removed in `82f9d1c` — and it could not fall
+  until Σ was condensed. The condenser shipped in `424b719`, the very next
+  commit, so the delta now falls by whatever the fold removes:
+  41,932 chars, about 10.5K tokens, on the first real session it ran on.
 
 So the saving lives in the comparison between two requests' `tokensBefore`, which
 the command never prints side by side, while the printed delta measures only Σ's
-price. That is why the next lever is condensation and not another body cut.
+price. That is why the next lever was condensation and not another body cut —
+and that lever has since shipped (`424b719`).
 
 ### What the two-causes table got wrong, and what the correction buys
 
@@ -455,8 +462,9 @@ the result cap shipped as the second lever rather than the first.
 
 So Σ is a real and growing cost in exactly the sessions that use it most, and
 the lever that addresses it condenses **findings** rather than the state as a
-whole. A `sigmaWarnTokens` line now reports the size in `/skillstate`, and a
-condenser that folds resolved findings is the obvious next thing to price.
+whole. A `sigmaWarnTokens` line now reports the size in `/skillstate`; the
+condenser that follows from it has since shipped (`424b719`) — see *What shipped
+since this section was written* below.
 
 ### The ordering trap, and why it held
 
@@ -468,6 +476,34 @@ Both cuts are idempotent, which is what makes that ordering safe: a folded patch
 is a string, a capped value is under its budget, and a second pass can produce
 nothing new. This is also why the golden fixtures did not move.
 
+### What shipped since this section was written
+
+This section's measurements predate the condenser, so its own closing advice —
+"a condenser that folds resolved findings is the obvious next thing to price" —
+named the next lever. That lever has since shipped, and was exercised on this
+session:
+
+- **The condenser** (`424b719`, `src/core/sigma-condense.ts`). A write whose
+  `render(Σ)` passes the `sigmaWarnTokens` fold threshold folds each over-long
+  finding to head + marker + tail, supersedes a correction pair or a numbered
+  series at its surviving winner, and moves every original character into a
+  **bounded session archive** on the durable record (`MAX_ARCHIVE_CHARS` 262144;
+  oldest entries yield first, and the newest entry is never dropped). The
+  collapse this section describes never read Σ; the condenser is the first
+  thing that shrinks it.
+- **The read path** (`0e0e298`, `/skillstate <key>` and `/skillstate archive`,
+  plus the tool's recall half at `d38a8d4`). This is what makes the fold safe
+  rather than lossy: the archive is only worth building if what it holds can be
+  read back. On this session's archive the read path has been exercised for
+  real — **218 entries, 129,132 chars**, largest `command_rewire_last_step` at
+  1,415 chars, which is **1415 in the archive against the 400 the render
+  keeps**.
+- **The floor measured on real Σ**: the first session the fold ran on shed
+  **41,932 chars, about 10.5K tokens** of render at the 400-char floor, against
+  a projection of 17.6K — less, because a folded finding still costs its head,
+  its tail and a marker. So the condenser is not free, but it is the first
+  lever that moved Σ's own 41K.
+
 ### Still open
 
 - **Reasoning** — the component the old table never counted, now measured at
@@ -477,8 +513,10 @@ nothing new. This is also why the golden fixtures did not move.
   whether the host forwards the field at all, and in what shape. Until a provider
   answers that, a reasoning cut is a guess whose failure mode is a rejected
   signature, so it stays research rather than a lever.
-- **Σ condensation** (OPTIMIZATIONS F6) — priced above; findings-dominated, and
-  the warning line already ships.
+- **Σ condensation** (OPTIMIZATIONS F6) — **shipped** (`424b719`); the residual
+  is that it is pressure-gated, not continuous: the fold runs on a write that
+  crosses the threshold, so Σ can grow back between writes, and once nothing
+  foldable is left the size line is the model's cue to consolidate by hand.
 - From `docs/OPTIMIZATIONS.md` (another session's report): F2 — 29 soft refusals
   because `state_patch` arrived as malformed JSON, 26 of them a single extra
   trailing brace, suggesting an enriched refusal naming the parse error and

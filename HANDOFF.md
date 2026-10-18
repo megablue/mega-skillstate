@@ -9,19 +9,27 @@ disagrees with the code, the code is right. `AGENTS.md` is the process doc,
 This file is the volatile one — it exists so a new session knows *where things
 stand*, not *how they work*.
 
-As of the roadmap corrections, the tip is `a51c108` ("Correct the roadmap: the
-condenser shipped, and Phase 3's file set landed") - `git rev-parse HEAD` for
-the sha; this file does not name itself, because amending the fill-in would
-rewrite it again. `main` is **ahead of `origin/main` by 2** - `a51c108` and this
-file's own commit, both local and not pushed; `git rev-list --count
-origin/main..HEAD` is the check that never goes stale, because this header
-cannot re-count itself. Everything through `4aa74bd` is on the remote and the CI
-run for that pushed tip (`38685458940`) went green. **Push is the user's call:
-every commit since `4aa74bd` is local, so it is unverified on CI rather than
-green.** State it that way rather than paraphrasing an older green run.
+As of `2026-10-19 00:21`, the tip is `ac3e541` ("Refresh HANDOFF.md against the
+roadmap corrections") - `git rev-parse HEAD` for the sha. **No work has landed
+in this repository since that refresh:** the tree is clean at the tip and
+everything below still describes it, so a new session starts by reading, not by
+hunting for uncommitted changes. `origin/main..HEAD` is **2** commits
+(`a51c108`, `ac3e541`), both local and not pushed, and this refresh is the next
+one on top; `git rev-list --count origin/main..HEAD` is the check that never
+goes stale, because this header cannot re-count itself. Everything through
+`4aa74bd` is on the remote and the CI run for that pushed tip (`38685458940`)
+went green. **Push is the user's call: every commit since `4aa74bd` is local,
+so it is unverified on CI rather than green.** State it that way rather than
+paraphrasing an older green run.
 
 ## State
 
+- **The gate is green at the tip, re-run `2026-10-19 00:21`.** `npm run
+  typecheck` exit 0; `npm run smoke` exit 0 (`smoke: ok`) - the 8 OpenCode
+  golden cases and the 7 `golden-pi.json` cases replay byte-for-byte, and the
+  proxy daemon / MCP / config, pairing-fuzz, erosion, Σ-fold, archive/recall and
+  `daemon killed mid-stream` rows all pass. Nothing in this repo changed to earn
+  that run; it is recorded so the next session does not have to re-derive it.
 - **Phase 1 (the core extraction) is complete and pushed.**
   `9a2be0a` split the host-free core from the OpenCode glue: `src/core/`
   (`config`, `compaction`, `prompts`, `schema`, `seed`, `state`, `types`,
@@ -237,8 +245,11 @@ green.** State it that way rather than paraphrasing an older green run.
   the last install (12:13:28 → 12:13:37). **Measure before asserting; a stale
   handoff line is still wrong when it is confidently repeated.** Both scopes
   were then refreshed anyway (`plugin:install` + `plugin:install:project`,
-  39 files each, `plugin:status` now "in sync" for both) because that is free
-  and removes the question. The two files an earlier `src/`-only check missed
+  39 files each at that measurement) because that is free and removes the
+  question. **Re-measured `2026-10-19 00:21`: `plugin:status` reports a copy of
+  the shipped set in each scope, 41 files, in sync with the repository** - so
+  the 39 was right when written and has since gone two files stale. The two
+  files an earlier `src/`-only check missed
   as absent were `src/proxy/config.ts` and `src/proxy/mcp.ts`; the plugin
   half never imports `src/proxy/` (grep: 2 comment lines in `ports.ts` only),
   so their absence never affected the running host. The remaining live-verification
@@ -252,11 +263,26 @@ green.** State it that way rather than paraphrasing an older green run.
   prompt and tool state exactly as the handler assumes. Treat the first live
   run as a real test, not a formality.
 - Compaction end-to-end is still unproven live (the smoke drives a fake host).
-- **Map sizing (deferred).** `docs/features/configuration.md` → `## How & why`
-  and `docs/features/skill-state-controls.md` → `## How & why` exceed the ~2 KB
-  single-read guidance; `feature_map_regen` can split them. The two pages
-  whose Map entries were rewritten in `fab51f0` were only partially read —
-  the exact Map lines were edited by grep, not a full re-read.
+- **Map sizing (deferred).** `feature_map_check` at `2026-10-19` reports **8
+  index rows, 8 pages, every page linked and every link resolving**, and these
+  sections over the ~2 KB single-read guidance: `configuration.md` → `## How &
+  why` (2901 B); `context-collapse.md` → `## Map` (2075 B) and `## Tests that
+  pin it` (3204 B); `proxy-codecs.md` → `## How & why` (2713 B); `proxy-mcp.md`
+  → `## How & why` (2877 B); `proxy-session-store.md` → `## How & why` (3278 B);
+  `skill-state-controls.md` → `## What it does` (2444 B), `## Map` (3956 B),
+  `## How & why` (6746 B) and `## Tests that pin it` (2094 B).
+  `feature_map_regen` splits each at boundaries the page already has, but
+  `skill-state-controls.md` → `## How & why` already divides at `###`, so the
+  tool reports nothing needed for it. This list supersedes the earlier
+  two-page one, which was measured against a shorter map. The two pages whose
+  Map entries were rewritten in `fab51f0` were only partially read - the exact
+  Map lines were edited by grep, not a full re-read.
+- **This repo's map is still the legacy Markdown form**
+  (`docs/features/README.md` plus the eight `.md` pages). `feature_map_check`
+  reads it and reports `legacy map`; `feature_map_upgrade` would write `.html`
+  siblings and leave the `.md` files in place (`prune` is the switch that
+  removes them). Converting is a decision, not a cleanup - `AGENTS.md` and the
+  pages name `README.md` as the index.
 - Not implemented from `HOST-API-NOTES.md`: `ctx.event.subscribe` idle flush,
   `ctx.session.synthetic` durable turn, `Message.system()` injection role.
 - Optional: a token/percentage-gated collapse trigger alongside `min`.
@@ -301,6 +327,7 @@ green.** State it that way rather than paraphrasing an older green run.
   previous id resumes with an empty Σ (the old record is still there).
 - The feature-map index once carried duplicate rows; the check is to `git grep`
   a feature name over `docs/features/README.md` — two hits means it is back.
+  Clear at `2026-10-19` (`feature_map_check`: 8 rows, 8 pages, none duplicated).
 - **A `?? <default>` on a session id silently voids the case it is meant to
   test.** `piContextEvent` once defaulted its `sessionId` to `"ses_pi"`, which
   handed the `no-session-id` case a real session and made it record a
@@ -310,8 +337,9 @@ green.** State it that way rather than paraphrasing an older green run.
 
 ## Local-only state (not on the remote)
 
-- Two commits are local-only: the roadmap corrections (`a51c108`) and this
-  file's own refresh. Everything else is on
+- Two commits are local-only: the roadmap corrections (`a51c108`) and the
+  previous refresh of this file (`ac3e541`); this refresh is the third, still
+  uncommitted as of the stamp. Everything else is on
   `github.com/megablue/mega-skillstate` (`main`, with a CI workflow running
   `typecheck` + `smoke` on ubuntu and windows, node 22, and a `FUNDING.yml`), and
   the run for the pushed tip (`4aa74bd`, run `38685458940`) is green on both
